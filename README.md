@@ -38,7 +38,49 @@ Android 11 及以上的无线调试端口会变。要固定 5555，先连上后�
 adb tcpip 5555
 ```
 
-### 安装 / Installation
+### 命令行启动 / docker run
+
+不用先克隆仓库。建一个空目录给配置和已下载的包，再拉镜像。
+
+```bash
+mkdir -p /volume1/docker/tv-apk-sync/data
+docker pull lzylipu/tv-apk-sync:latest
+docker run -d \
+  --name tv-apk-sync \
+  --restart unless-stopped \
+  --log-opt max-size=10m --log-opt max-file=3 \
+  -e TZ=Asia/Shanghai \
+  -p 8088:8080 \
+  -v /volume1/docker/tv-apk-sync/data:/data \
+  lzylipu/tv-apk-sync:latest
+```
+
+群晖以外的机器，把 `/volume1/docker/tv-apk-sync/data` 换成你自己的目录，例如 `/opt/tv-apk-sync/data`。
+
+| 参数 | 含义 | 为什么需要 |
+|---|---|---|
+| `-p 8088:8080` | 浏览器开 `8088`，容器里网页听 `8080` | 8080 常被别的服务占用，外面固定 8088 |
+| `-v .../data:/data` | 配置、记录、已下载的 APK 都在这个目录 | 删容器、换镜像不会把配置和包清掉 |
+| `-e TZ=Asia/Shanghai` | 日志用北京时间 | 对得上页面里的记录 |
+| `--restart unless-stopped` | 退出后自己起来，手动停了除外 | 不用盯着 |
+| `--log-opt max-size=10m --log-opt max-file=3` | 日志最多约 30MB | 长期挂着不会把盘写满 |
+
+私有仓库再加一行 `-e GITHUB_TOKEN=你的token`。公开仓库不用。
+
+浏览器打开 `http://宿主机IP:8088`。第一次进去，「设备」填电视 IP 和 `5555`，「软件」填名称和链接，点保存。配置会写到挂载目录里的 `config.json`，不用手改文件。
+
+### 目录里有什么 / What is in data
+
+| 文件 | 作用 |
+|---|---|
+| `config.json` | 设备、软件链接、通知、查版本间隔。第一次打开网页自动生成 |
+| `state.json` | 上次查版本的时间、每台设备已装到哪一版 |
+| `apk/` | 已经下载的安装包。网页「本地包」里的推送、下载、删除都对这里 |
+| `sync.log` | 页面「记录」读的日志 |
+
+`config.example.json` 只是仓库里的例子，容器不读它。
+
+### 用 compose / Compose
 
 ```bash
 git clone https://github.com/lzylipu/tv-apk-sync.git
@@ -46,22 +88,17 @@ cd tv-apk-sync
 docker compose up -d
 ```
 
-浏览器打开 `http://宿主机IP:8088`。先在「设备」里填电视 IP，再在「软件」里填名称和链接，点保存。
+compose 里已经写了同样的端口 `8088:8080` 和目录 `./data:/data`。浏览器同样开 `http://宿主机IP:8088`。
 
 ### 运行 / Usage
 
-公开仓库不用 token。私有仓库在 compose 里加 `GITHUB_TOKEN`。
+公开仓库不用 token。私有仓库在 `docker run` 或 compose 里加 `GITHUB_TOKEN`。
 
-| 参数 | 含义 | 为什么需要 |
-|---|---|---|
-| `restart: unless-stopped` | 退出后自己起来 | 不用盯着 |
-| `TZ=Asia/Shanghai` | 日志用北京时间 | 对得上记录 |
-| 日志 10MB × 3 | 日志不会把盘写满 | 长期挂着 |
-| `./data:/data` | 配置、记录、已下的 APK | 重建容器不用重下 |
+电视没开时这一轮只记「不在线」，不发失败通知。查到新版会先下到 `data/apk`。设备开着时，默认每 5 分钟装一次已经下好、版本更高的包。查 GitHub 默认 24 小时一次，不跟着这 5 分钟走。
 
 ## ⚙️ 配置 / Configuration
 
-网页里能改。文件在 `data/config.json`。
+网页里能改。文件在挂载目录的 `config.json`，不是容器里面一份会丢的文件。
 
 | 字段 | 作用 |
 |---|---|

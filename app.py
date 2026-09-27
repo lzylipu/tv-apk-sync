@@ -454,8 +454,7 @@ def once():
         except ValueError:
             due = True
     if not due:
-        log("还没到查版本的时间")
-        return
+        log("还没到查版本的时间，只安装已经下好的包")
 
     for app in apps:
         source = source_of(app)
@@ -471,56 +470,66 @@ def once():
                 lines.append(f"{name} Android {profile['release']} 低于 {label} 要求的 SDK {min_sdk}，跳过")
                 log(lines[-1])
                 continue
-            try:
-                chosen = resolve_release(source, profile["family"], token)
-            except urllib.error.HTTPError as exc:
-                lines.append(f"{label} 查版本失败 HTTP {exc.code}")
-                log(lines[-1])
-                continue
-            except Exception as exc:
-                lines.append(f"{label} 查版本失败 {exc}")
-                log(lines[-1])
-                continue
-            if chosen.get("error"):
-                lines.append(f"{name} {chosen['error']}")
-                log(lines[-1])
-                continue
-            key = f"{address}|{chosen['key']}"
-            prev = state["apps"].get(key, {})
-            files = chosen.get("assets") or [{"name": chosen["name"], "url": chosen["url"], "size": chosen["size"]}]
+            key = ""
+            chosen = {}
             dest = None
-            for item in files:
-                path = cache_dest(source, chosen["tag"], item["name"])
-                if not path.exists() or (item["size"] and path.stat().st_size != item["size"]):
-                    log(f"下载 {item['name']}")
-                    download(item["url"], path, token)
+            if due:
+                try:
+                    chosen = resolve_release(source, profile["family"], token)
+                except urllib.error.HTTPError as exc:
+                    lines.append(f"{label} 查版本失败 HTTP {exc.code}")
+                    log(lines[-1])
+                    continue
+                except Exception as exc:
+                    lines.append(f"{label} 查版本失败 {exc}")
+                    log(lines[-1])
+                    continue
+                if chosen.get("error"):
+                    lines.append(f"{name} {chosen['error']}")
+                    log(lines[-1])
+                    continue
+                key = f"{address}|{chosen['key']}"
+                files = chosen.get("assets") or [{"name": chosen["name"], "url": chosen["url"], "size": chosen["size"]}]
+                for item in files:
+                    path = cache_dest(source, chosen["tag"], item["name"])
+                    if not path.exists() or (item["size"] and path.stat().st_size != item["size"]):
+                        log(f"下载 {item['name']}")
+                        download(item["url"], path, token)
+                    if dest is None:
+                        dest = path
+            else:
+                dest = next(iter(sorted((CACHE / cache_key(source)).glob("*.apk"))), None)
                 if dest is None:
-                    dest = path
+                    continue
+            key = key or f"{address}|{source}"
+            prev = state["apps"].get(key, {})
             ident = apk_identity(dest)
             if ident["package"]:
                 app["package"] = ident["package"]
                 app["apk_version"] = ident["version"]
                 app["apk_label"] = ident["label"]
                 save_json(CONFIG, cfg)
-            if prev.get("tag") == chosen["tag"] and chosen["tag"]:
+            if chosen.get("tag") and prev.get("tag") == chosen["tag"]:
                 log(f"{name} {label} 已是 {chosen['tag']}，跳过")
                 continue
             installed = installed_version(address, ident["package"]) if ident["package"] else ""
             if installed and ident["version"] and installed == ident["version"]:
-                state["apps"][key] = {"tag": chosen["tag"], "asset": chosen["name"], "version": ident["version"], "at": datetime.now().isoformat(timespec="seconds")}
-                changed = True
-                save_json(STATE, state)
+                if chosen.get("tag"):
+                    state["apps"][key] = {"tag": chosen["tag"], "asset": chosen["name"], "version": ident["version"], "at": datetime.now().isoformat(timespec="seconds")}
+                    changed = True
+                    save_json(STATE, state)
                 log(f"{name} {label} 电视上已是 {installed}，跳过")
                 continue
             code, out = adb("-s", address, "install", "-r", str(dest), timeout=300)
+            shown = chosen.get("tag") or dest.name
             if code == 0 and "Success" in out:
                 state["apps"][key] = {
-                    "tag": chosen["tag"],
-                    "asset": chosen["name"],
+                    "tag": shown,
+                    "asset": chosen.get("name") or dest.name,
                     "at": datetime.now().isoformat(timespec="seconds"),
                 }
                 changed = True
-                lines.append(f"{name} {label} 已装 {chosen['tag']}（{chosen['name']}）")
+                lines.append(f"{name} {label} 已装 {shown}")
             else:
                 lines.append(f"{name} {label} 安装失败：{install_reason(out)}")
             log(lines[-1])
@@ -533,8 +542,9 @@ def once():
         notice(cfg, "安装包已更新", "\n".join(lines))
     else:
         log("没有需要安装的更新")
-    state["checked_at"] = datetime.now().isoformat(timespec="seconds")
-    save_json(STATE, state)
+    if due:
+        state["checked_at"] = datetime.now().isoformat(timespec="seconds")
+        save_json(STATE, state)
 
 
 class Handler(BaseHTTPRequestHandler):

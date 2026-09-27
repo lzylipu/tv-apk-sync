@@ -13,13 +13,35 @@ Save a device, a name, and a link. Cached files can be downloaded, deleted, or p
 
 ## 🚀 Quick Start
 
+The TV needs developer options, USB debugging, and network debugging on port `5555`. The machine running Docker must be on the same LAN.
+
 ```bash
-git clone https://github.com/lzylipu/tv-apk-sync.git
-cd tv-apk-sync
-docker compose up -d
+mkdir -p /volume1/docker/tv-apk-sync/data
+docker pull lzylipu/tv-apk-sync:latest
+docker run -d \
+  --name tv-apk-sync \
+  --restart unless-stopped \
+  --log-opt max-size=10m --log-opt max-file=3 \
+  -e TZ=Asia/Shanghai \
+  -p 8088:8080 \
+  -v /volume1/docker/tv-apk-sync/data:/data \
+  lzylipu/tv-apk-sync:latest
 ```
 
-Open `http://HOST:8088`. The TV needs network debugging on port `5555`.
+Change `/volume1/docker/tv-apk-sync/data` to your own directory. Open `http://HOST:8088`.
+
+| Flag | Meaning |
+|---|---|
+| `-p 8088:8080` | Browser uses 8088. The page inside the container listens on 8080 |
+| `-v .../data:/data` | Config, logs, and downloaded APKs. Removing the container does not delete them |
+| `-e TZ=Asia/Shanghai` | Log time is Beijing time |
+| `-e GITHUB_TOKEN` | Private GitHub repositories only. Leave it out for public ones |
+
+The first visit writes `config.json` in that directory. Add the TV address and the app link in the page. You do not edit the file by hand.
+
+`docker compose up -d` from a clone does the same port and volume mapping: `8088:8080` and `./data:/data`.
+
+Version checks default to every 24 hours. A package already downloaded is installed on the next 5-minute pass while the TV is on.
 
 ## ⚙️ Configuration
 
