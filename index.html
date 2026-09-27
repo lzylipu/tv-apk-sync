@@ -1,0 +1,296 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>电视装包</title>
+<style>
+:root{color-scheme:light;--ink:#172033;--muted:#667085;--line:#e4e7ec;--bg:#f4f7fb;--card:#fff;--nav:#fff;--accent:#175cd3;--ok:#067647;--bad:#b42318;--warn:#b54708}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Segoe UI",sans-serif}
+.shell{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+aside{background:var(--nav);color:var(--ink);padding:20px 14px;border-right:1px solid var(--line)}
+.brand{display:flex;gap:10px;align-items:center;margin:0 0 18px}
+.mark{width:38px;height:38px;border-radius:12px;background:#175cd3;color:#fff;display:grid;place-items:center;font-weight:700}
+.brand h1{font-size:16px;margin:0;color:#172033}.brand p{margin:0;color:#667085;font-size:12px}
+nav button{display:block;width:100%;text-align:left;background:transparent;color:#344054;border:0;border-radius:8px;padding:10px 12px;margin:0 0 4px;cursor:pointer}
+nav button.on{background:#e8f0fe;color:#175cd3;font-weight:650}
+main{padding:22px}
+.pane{display:none;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+.pane.on{display:block}
+h2{margin:0 0 6px;font-size:18px}.hint{color:var(--muted);margin:0 0 16px}
+.row{display:grid;grid-template-columns:1fr 1.3fr .5fr auto;gap:8px;align-items:end;margin:0 0 8px}
+.app-row{grid-template-columns:1.4fr 1fr auto}
+label{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
+input,select{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font:inherit;background:#fff}
+button{border:0;border-radius:8px;padding:9px 12px;background:var(--accent);color:#fff;font:inherit;cursor:pointer}
+button.ghost{background:#eef2f6;color:var(--ink)}button.warn{background:#fff4e8;color:var(--warn)}button.bad{background:#f8e8e6;color:var(--bad)}
+.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.card{border:1px solid var(--line);border-radius:10px;padding:12px;margin:0 0 8px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.muted{color:var(--muted)}
+pre{white-space:pre-wrap;background:#0f1728;color:#d7deea;border-radius:10px;padding:12px;min-height:160px;margin:0}
+.toast{position:fixed;right:16px;bottom:16px;background:#172033;color:#fff;border-radius:8px;padding:10px 14px;display:none}
+.toolbar{display:flex;gap:8px;align-items:center;margin:0 0 12px;flex-wrap:wrap}
+.toolbar input{max-width:280px}
+.tree{display:flex;flex-direction:column;gap:12px}
+.source{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.source h3{margin:0;padding:12px 14px;background:#f8fafc;font-size:16px}
+.source .meta{padding:0 14px 10px;color:var(--muted);font-size:12px;word-break:break-all}
+.file{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.appcard{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff;display:flex;flex-direction:column;gap:8px}
+.appcard b{font-size:15px}.pkg{font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);word-break:break-all}
+.ops{display:flex;gap:6px;flex-wrap:wrap}
+.ops button{padding:6px 9px;font-size:13px}
+.proclist{display:flex;flex-direction:column;gap:6px;max-height:68vh;overflow:auto}
+.procrow{display:grid;grid-template-columns:84px 70px 1fr auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.mem{font-variant-numeric:tabular-nums;color:#172033;font-weight:650}
+@media(max-width:760px){.shell{grid-template-columns:1fr}aside{padding:14px}.row,.app-row,.procrow{grid-template-columns:1fr}}
+</style>
+<div class="shell">
+<aside>
+  <div class="brand"><div class="mark">TV</div><div><h1>电视装包</h1><p>连接、装包、看进程</p></div></div>
+  <nav>
+    <button class="on" data-pane="devices" onclick="show('devices',this)">设备</button>
+    <button data-pane="apps" onclick="show('apps',this)">软件</button>
+    <button data-pane="notify" onclick="show('notify',this)">通知</button>
+    <button data-pane="status" onclick="show('status',this)">状态</button>
+    <button data-pane="cache" onclick="show('cache',this)">本地包</button>
+    <button data-pane="installed" onclick="show('installed',this)">已装应用</button>
+    <button data-pane="proc" onclick="show('proc',this)">进程</button>
+    <button data-pane="shell" onclick="show('shell',this)">命令行</button>
+    <button data-pane="log" onclick="show('log',this)">记录</button>
+  </nav>
+</aside>
+<main>
+  <section id="devices" class="pane on">
+    <h2>设备</h2>
+    <p class="hint">填电视或投影仪的局域网 IP。端口默认 5555。这里的内容不会被自动刷新清掉。</p>
+    <div id="deviceList"></div>
+    <button class="ghost" onclick="addDevice()">添加设备</button>
+    <div class="actions"><button onclick="save()">保存</button></div>
+  </section>
+  <section id="apps" class="pane">
+    <h2>软件</h2>
+    <p class="hint">填 GitHub 仓库、仓库网址，或 APK 直链。不用填包名。定时扫描最新版，设备在线才安装。</p>
+    <div id="appList"></div>
+    <button class="ghost" onclick="addApp()">添加软件</button>
+    <div class="actions"><button onclick="save()">保存</button><button class="ghost" onclick="pullNow()">现在拉一次包</button></div>
+  </section>
+  <section id="notify" class="pane">
+    <h2>通知</h2>
+    <p class="hint">三个填一个就行。安装失败或有新包时才发。</p>
+    <p><label>飞书机器人</label><input id="feishu" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."></p>
+    <p><label>PushPlus</label><input id="pushplus" placeholder="token"></p>
+    <p><label>Bark</label><input id="bark" placeholder="https://api.day.app/你的key"></p>
+    <p><label>查版本间隔（小时）</label><input id="pull" type="number" min="1" value="24"></p>
+    <p><label>在线检查（分钟）</label><input id="install" type="number" min="1" value="5"></p>
+    <div class="actions"><button onclick="save()">保存</button><button class="ghost" onclick="testNotify()">发一条测试</button></div>
+  </section>
+  <section id="status" class="pane">
+    <h2>状态</h2>
+    <p class="hint">只刷新这一块，每 15 秒看一次设备是否在线。</p>
+    <div id="live"><p class="muted">保存设备后显示</p></div>
+  </section>
+  <section id="log" class="pane">
+    <h2>记录</h2>
+    <p class="hint">只刷新这一块。</p>
+    <pre id="logbox">还没有记录</pre>
+  </section>
+  <section id="cache" class="pane">
+    <h2>本地包</h2>
+    <p class="hint">按你填的名称和链接拉下来的 APK 在这里。点推送就装到选中的设备，下载是把文件存到这台电脑，删除只删缓存，不卸电视上的应用。</p>
+    <div class="toolbar">
+      <select id="cacheDevice"></select>
+      <button class="ghost" onclick="loadCache()">刷新</button>
+    </div>
+    <div id="cacheList" class="tree"><p class="muted">还没有缓存包</p></div>
+  </section>
+  <section id="installed" class="pane">
+    <h2>已装应用</h2>
+    <p class="hint">自己安装的和系统应用分开。清缓存不动账号数据。清除数据会退出登录。卸载系统应用只对当前用户生效，可以再启用。</p>
+    <div class="toolbar">
+      <select id="appDevice"></select>
+      <input id="appQuery" placeholder="搜名称或包名" oninput="renderPackages()">
+      <button class="ghost" onclick="loadPackages('user')">自己安装的</button>
+      <button class="ghost" onclick="loadPackages('system')">系统应用</button>
+    </div>
+    <div id="pkgList" class="appgrid"><p class="muted">先选一台在线设备</p></div>
+  </section>
+  <section id="proc" class="pane">
+    <h2>进程</h2>
+    <p class="hint">按内存从大到小排。上面的就是占得最多的，可以停止。系统底层进程停不掉会提示。</p>
+    <div class="toolbar">
+      <select id="procDevice"></select>
+      <input id="procQuery" placeholder="搜进程名" oninput="renderProcesses()">
+      <button class="ghost" onclick="loadProcesses()">刷新进程</button>
+    </div>
+    <div id="procBox" class="proclist"><p class="muted">还没读取</p></div>
+  </section>
+  <section id="shell" class="pane">
+    <h2>命令行</h2>
+    <p class="hint">只填 shell 后面的内容，不要再写 adb。例如 pm list packages。</p>
+    <p><label>设备</label><select id="shellDevice"></select></p>
+    <p><label>命令</label><input id="shellCmd" placeholder="pm list packages -3"></p>
+    <div class="actions"><button onclick="runShell()">执行</button></div>
+    <pre id="shellOut">还没有结果</pre>
+  </section>
+</main>
+</div>
+<div id="toast" class="toast"></div>
+<script>
+let cfg={devices:[],apps:[],notify:{},pull_hours:24,install_minutes:5};
+let loaded=false;
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+function show(id,btn){
+  document.querySelectorAll(".pane").forEach(el=>el.classList.toggle("on",el.id===id));
+  document.querySelectorAll("nav button").forEach(el=>el.classList.toggle("on",el===btn));
+  if(id==="cache") loadCache();
+}
+function field(obj,key){return `<input data-k="${key}" value="${esc(obj[key]??"")}">`}
+function paintForms(){
+  deviceList.innerHTML=cfg.devices.map((d,i)=>`<div class="row"><div><label>名称</label>${field(d,"name")}</div><div><label>IP</label>${field(d,"ip")}</div><div><label>端口</label>${field(d,"port")}</div><button class="bad" onclick="removeDevice(${i})">删除</button></div>`).join("")||'<p class="muted">还没有设备</p>';
+  appList.innerHTML=cfg.apps.map((d,i)=>`<div class="row app-row"><div><label>名称，可空</label>${field(d,"name")}</div><div><label>GitHub 或 APK 直链</label>${field(d,"source")}</div><button class="bad" onclick="removeApp(${i})">删除</button></div>`).join("")||'<p class="muted">还没有软件</p>';
+  document.querySelectorAll("[data-k]").forEach(el=>el.oninput=collect);
+}
+function collect(){
+  const rows=[...document.querySelectorAll("#deviceList .row")];
+  cfg.devices=rows.map(row=>{
+    const o={};
+    [...row.querySelectorAll("[data-k]")].forEach(el=>o[el.dataset.k]=el.value);
+    return o;
+  });
+  const arows=[...document.querySelectorAll("#appList .row")];
+  cfg.apps=arows.map(row=>{
+    const o={};
+    [...row.querySelectorAll("[data-k]")].forEach(el=>o[el.dataset.k]=el.value);
+    return o;
+  });
+  cfg.notify={feishu:feishu.value.trim(),pushplus:pushplus.value.trim(),bark:bark.value.trim()};
+  cfg.pull_hours=+pull.value||24;
+  cfg.install_minutes=+install.value||5;
+}
+function addDevice(){collect();cfg.devices.push({name:"电视",ip:"",port:5555});paintForms()}
+function addApp(){collect();cfg.apps.push({name:"",source:""});paintForms()}
+function removeDevice(i){collect();cfg.devices.splice(i,1);paintForms()}
+function removeApp(i){collect();cfg.apps.splice(i,1);paintForms()}
+function toast(text){const el=document.getElementById("toast");el.textContent=text;el.style.display="block";setTimeout(()=>el.style.display="none",2500)}
+async function save(){
+  collect();
+  const res=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(cfg)});
+  if(!res.ok){toast(await res.text());return}
+  toast("已保存");
+  refreshLive();
+}
+async function loadOnce(){
+  cfg=await (await fetch("/api/config")).json();
+  cfg.notify=cfg.notify||{};
+  cfg.apps=(cfg.apps||[]).map(item=>({name:item.name||"",source:item.source||item.repo||""}));
+  feishu.value=cfg.notify.feishu||"";
+  pushplus.value=cfg.notify.pushplus||"";
+  bark.value=cfg.notify.bark||"";
+  pull.value=cfg.pull_hours||24;
+  install.value=cfg.install_minutes||5;
+  paintForms();
+  loaded=true;
+}
+async function refreshLive(){
+  const live=await (await fetch("/api/devices")).json();
+  window.liveDevices=live;
+  const sel=document.getElementById("shellDevice");
+  const prev=sel.value;
+  const options=live.map(d=>`<option value="${esc(d.address)}">${esc(d.name||d.ip)} ${d.online?"在线":"不在线"}</option>`).join("");
+  ["shellDevice","appDevice","procDevice","cacheDevice"].forEach(id=>{
+    const box=document.getElementById(id);
+    const old=box.value;
+    box.innerHTML=options;
+    if(old) box.value=old;
+  });
+  if(prev) sel.value=prev;
+  document.getElementById("live").innerHTML=live.map(d=>`<div class="card"><b>${esc(d.name||d.ip)}</b><br>${d.online?`<span class="ok">在线</span> ${esc(d.model||"")} Android ${esc(d.android||"")} ${esc(d.abi||"")}`:`<span class="bad">不在线</span> <span class="muted">${esc(d.detail||"")}</span>`}</div>`).join("")||'<p class="muted">保存设备后这里显示是否在线</p>';
+  document.getElementById("logbox").textContent=await (await fetch("/api/log")).text();
+}
+function currentAddress(){return document.getElementById("appDevice").value || document.getElementById("shellDevice").value}
+let packageRows=[];
+let processRows=[];
+async function appAction(action, pkg){
+  const names={uninstall:"卸载",cache:"清缓存",clear:"清除数据",disable:"停用",enable:"启用",stop:"强停"};
+  if((action==="uninstall"||action==="clear"||action==="disable") && !confirm(`确定${names[action]} ${pkg}？`)) return;
+  const res=await fetch("/api/app-action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address:currentAddress(),package:pkg,action})});
+  toast(await res.text());
+  if(action==="uninstall") loadPackages(window.pkgKind||"user");
+}
+function renderPackages(){
+  const q=(document.getElementById("appQuery").value||"").trim().toLowerCase();
+  const rows=packageRows.filter(r=>!q || (r.label||"").toLowerCase().includes(q) || r.package.toLowerCase().includes(q));
+  document.getElementById("pkgList").innerHTML=rows.map(r=>`<article class="appcard"><div><b>${esc(r.label||r.package)}</b><div class="muted">${esc(r.version||"没有读到版本")}</div><div class="pkg">${esc(r.package)}</div></div><div class="ops"><button class="ghost" onclick="appAction('stop',${JSON.stringify(r.package)})">强停</button><button class="ghost" onclick="appAction('cache',${JSON.stringify(r.package)})">清缓存</button><button class="warn" onclick="appAction('clear',${JSON.stringify(r.package)})">清数据</button><button class="ghost" onclick="appAction('disable',${JSON.stringify(r.package)})">停用</button><button class="ghost" onclick="appAction('enable',${JSON.stringify(r.package)})">启用</button><button class="bad" onclick="appAction('uninstall',${JSON.stringify(r.package)})">卸载</button></div></article>`).join("")||'<p class="muted">没有匹配的应用</p>';
+}
+async function loadPackages(kind){
+  window.pkgKind=kind;
+  const address=currentAddress();
+  if(!address){toast("没有设备");return}
+  document.getElementById("pkgList").innerHTML='<p class="muted">正在读取…</p>';
+  packageRows=await (await fetch("/api/packages?address="+encodeURIComponent(address)+"&kind="+kind)).json();
+  renderPackages();
+}
+function renderProcesses(){
+  const q=(document.getElementById("procQuery").value||"").trim().toLowerCase();
+  const rows=processRows.filter(r=>!q || r.name.toLowerCase().includes(q) || r.user.toLowerCase().includes(q));
+  document.getElementById("procBox").innerHTML=rows.map(r=>`<div class="procrow"><span class="mem">${(r.rss/1024).toFixed(1)} MB</span><span class="muted">${esc(r.pid)}</span><span class="pkg">${esc(r.name)}</span><button class="bad" onclick='killProc(${JSON.stringify(r.pid)},${JSON.stringify(r.name)})'>停止</button></div>`).join("")||'<p class="muted">没有匹配的进程</p>';
+}
+async function loadProcesses(){
+  const address=document.getElementById("procDevice").value||currentAddress();
+  if(!address){toast("没有设备");return}
+  document.getElementById("procBox").innerHTML='<p class="muted">正在读取…</p>';
+  processRows=await (await fetch("/api/processes?address="+encodeURIComponent(address))).json();
+  renderProcesses();
+}
+async function killProc(pid,name){
+  if(!confirm(`停止 ${name}？`)) return;
+  const res=await fetch("/api/kill",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address:document.getElementById("procDevice").value||currentAddress(),pid,name})});
+  toast(await res.text());
+  loadProcesses();
+}
+async function loadCache(){
+  const box=document.getElementById("cacheList");
+  box.innerHTML='<p class="muted">正在读取…</p>';
+  const [rows, conf]=await Promise.all([fetch("/api/cache").then(r=>r.json()), fetch("/api/config").then(r=>r.json())]);
+  const mb=n=>(n/1048576).toFixed(1)+" MB";
+  const groups=new Map();
+  for(const app of (conf.apps||[])){
+    const source=app.source||app.repo||"";
+    const found=source.match(/github\.com\/([^/\s]+)\/([^/\s#?]+)/);
+    const repo=found && !source.toLowerCase().split("?")[0].includes(".apk") ? `${found[1]}/${found[2].replace(/\.git$/,"")}` : "";
+    const file=(source.split("?")[0].split("/").pop()||"");
+    const key=repo ? repo.replace(/[^A-Za-z0-9._-]+/g,"_").slice(0,80) : source.replace(/[^A-Za-z0-9._-]+/g,"_").slice(0,80);
+    groups.set(key,{name:app.name||file||source,source,file,files:[]});
+  }
+  const used=new Set();
+  for(const row of rows){
+    let hit=null;
+    for(const group of groups.values()){
+      if(group.file && row.file.includes(group.file)) hit=group;
+    }
+    if(!hit){
+      const key=row.folder||row.file;
+      if(!groups.has(key)) groups.set(key,{name:row.folder||row.label||row.file,source:"",file:"",files:[]});
+      hit=groups.get(key);
+    }
+    hit.files.push(row);
+    used.add(row.id);
+  }
+  box.innerHTML=[...groups.values()].map(g=>`<section class="source"><h3>${esc(g.name||"未命名")}</h3><div class="meta">${esc(g.source||"没有填写链接")}</div>${g.files.map(r=>`<div class="file"><div><b>${esc(r.label||r.file)}</b><div class="muted">${esc(r.version||"没读到版本")} · ${mb(r.size)} · ${esc(r.file)}</div><div class="pkg">${esc(r.package||"没读到包名")}</div></div><div class="ops"><button onclick="cacheAction('push',${JSON.stringify(r.id)})">推送</button><a class="ghost" style="padding:6px 9px;border-radius:8px;text-decoration:none" href="/api/cache?id=${encodeURIComponent(r.id)}">下载</a><button class="bad" onclick="cacheAction('delete',${JSON.stringify(r.id)})">删除</button></div></div>`).join("")||'<div class="file"><span class="muted">还没拉到包</span></div>'}</section>`).join("")||'<p class="muted">先在软件里保存名称和链接</p>';
+}
+async function cacheAction(action,id){
+  if(action==="delete" && !confirm("只删缓存里的这个包？")) return;
+  const res=await fetch("/api/cache-action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,id,address:document.getElementById("cacheDevice").value})});
+  toast(await res.text());
+  if(action==="delete") loadCache();
+}
+async function runShell(){
+  const address=currentAddress();
+  const command=shellCmd.value.trim();
+  const res=await fetch("/api/shell",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address,command})});
+  document.getElementById("shellOut").textContent=await res.text();
+}
+async function testNotify(){await save();toast(await (await fetch("/api/notify-test",{method:"POST"})).text())}
+async function pullNow(){await save();toast(await (await fetch("/api/pull",{method:"POST"})).text());refreshLive()}
+loadOnce().then(refreshLive);
+setInterval(()=>{if(loaded)refreshLive()},15000);
+</script>
