@@ -73,6 +73,26 @@ class LogicTests(unittest.TestCase):
         source = "https://github.com/youhunwl/TVAPP/raw/main/电视直播/千寻_1.1.5.apk"
         self.assertEqual(app.cache_key(source), "千寻_1.1.5.apk")
 
+    def test_v7_and_v8_are_the_same_release_line(self):
+        given = "SimpleLive-TV-tv_v1.8.1-armeabi-v7a-release.apk"
+        other = "SimpleLive-TV-tv_v1.8.1-arm64-v8a-release.apk"
+        desktop = "SimpleLive-TV-tv_v1.8.1-x86_64-release.apk"
+        self.assertEqual(app.release_shape(given), app.release_shape(other))
+        self.assertEqual(app.release_shape(given), app.release_shape(desktop))
+        source = "https://github.com/June6699/dart_simple_live/releases/download/tv_v1.8.1/" + given
+        line = app.release_line(source) or {}
+        assets = [
+            {"name": other, "browser_download_url": "https://example/64"},
+            {"name": given, "browser_download_url": "https://example/32"},
+            {"name": desktop, "browser_download_url": "https://example/x86"},
+        ]
+        release = {"tag_name": "tv_v1.8.1", "assets": assets}
+        shape = line.get("shape")
+        matched = [item for item in [release] if any(app.release_shape(asset["name"]) == shape for asset in item["assets"])]
+        self.assertEqual(len(matched), 1)
+        kept = [item["name"] for item in app.arm_assets(matched[0]["assets"]) if app.release_shape(item["name"]) == shape]
+        self.assertEqual(kept, [other, given])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -458,6 +458,8 @@ def adb_tool(*args, timeout=30):
 def release_shape(name):
     text = re.sub(r"\d+(?:\.\d+)+", "#", name)
     text = re.sub(r"(?<=[-_])v(?=#)", "", text)
+    text = re.sub(r"(?i)(?:^|[-_])(?:arm64-v8a|armeabi-v7a|arm64|aarch64|armeabi|x86_64|x86)(?=[-_.]|$)", "-", text)
+    text = re.sub(r"-{2,}", "-", text)
     return text
 
 
