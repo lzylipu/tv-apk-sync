@@ -2,6 +2,8 @@
 
 > English page. 简体中文见 [README.md](./README.md).
 
+<p align="center"><img src="./assets/logo.png" alt="TV APK Sync" width="160"></p>
+
 A local web console for Android TV and projectors. It checks one GitHub release line, or one direct APK link, once a day.
 
 ![status](https://img.shields.io/badge/status-active-success)

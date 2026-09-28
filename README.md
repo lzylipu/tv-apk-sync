@@ -2,6 +2,8 @@
 
 > 🌐 简体中文 | [English](./README_EN.md)
 
+<p align="center"><img src="./assets/logo.png" alt="电视装包" width="160"></p>
+
 在电脑或 NAS 上开一个网页，连局域网里的电视和投影仪，看已装应用、按内存看进程、把 APK 推上去。GitHub 仓库或直链有新版时，每天查一次，设备开着再装。
 
 A local web console for Android TV and projectors on the same LAN. It lists apps, sorts processes by memory, pushes APKs, and checks a GitHub line or a direct link once a day.

@@ -15,6 +15,7 @@ RUN apt-get update \
 
 WORKDIR /opt/tv-apk-sync
 COPY app.py index.html /opt/tv-apk-sync/
+COPY assets /opt/tv-apk-sync/assets
 
 ENV DATA_DIR=/data \
     TZ=Asia/Shanghai

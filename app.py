@@ -743,6 +743,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/":
             self.send(200, PAGE_FILE.read_text(encoding="utf-8"), "text/html; charset=utf-8")
+        elif self.path in ("/logo.png", "/favicon.png"):
+            icon = PAGE_FILE.with_name("assets") / self.path.lstrip("/")
+            self.send(200, icon.read_bytes(), "image/png")
         elif self.path == "/api/config":
             self.send(200, json.dumps(current_config(), ensure_ascii=False))
         elif self.path == "/api/config.yaml":
