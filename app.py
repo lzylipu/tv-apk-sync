@@ -282,6 +282,42 @@ def notify(cfg, text):
         log(f"通知失败 {exc}")
 
 
+def device_stats(address):
+    stats = {}
+    code, mem = adb("-s", address, "shell", "cat", "/proc/meminfo", timeout=15)
+    if code == 0:
+        found = dict(re.findall(r"(\w+):\s+(\d+)", mem))
+        total = int(found.get("MemTotal") or 0)
+        avail = int(found.get("MemAvailable") or found.get("MemFree") or 0)
+        if total:
+            stats["mem_total"] = total
+            stats["mem_used"] = max(0, total - avail)
+    code, df = adb("-s", address, "shell", "df", "-k", "/data", timeout=15)
+    if code == 0:
+        for line in df.splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 4 and parts[1].isdigit():
+                stats["disk_total"] = int(parts[1])
+                stats["disk_used"] = int(parts[2])
+                stats["disk_free"] = int(parts[3])
+                break
+    code, up = adb("-s", address, "shell", "cat", "/proc/uptime", timeout=10)
+    if code == 0 and up.split():
+        stats["uptime"] = int(float(up.split()[0]))
+    size = prop(address, "persist.sys.display.size") or prop(address, "sys.display-size")
+    if not size:
+        code, wm = adb("-s", address, "shell", "wm", "size", timeout=10)
+        match = re.search(r"(\d+x\d+)", wm or "")
+        size = match.group(1) if match else ""
+    if size:
+        stats["resolution"] = size.strip()
+    stats["brand"] = prop(address, "ro.product.brand")
+    stats["serial"] = prop(address, "ro.serialno") or prop(address, "ro.boot.serialno")
+    stats["build"] = prop(address, "ro.build.display.id")
+    stats["patch"] = prop(address, "ro.build.version.security_patch")
+    return {key: value for key, value in stats.items() if value not in ("", None)}
+
+
 def device_profile(address):
     ok, detail = connect(address)
     if not ok:
@@ -804,7 +840,8 @@ class Handler(BaseHTTPRequestHandler):
                 profile, err = device_profile(address)
                 row = {"name": device.get("name") or address, "ip": device.get("ip", ""), "address": address}
                 if profile:
-                    row.update({"online": True, "model": profile["model"], "android": profile["release"], "abi": profile["abi"]})
+                    row.update({"online": True, "model": profile["model"], "android": profile["release"], "abi": profile["abi"], "sdk": profile["sdk"]})
+                    row.update(device_stats(address))
                 else:
                     row.update({"online": False, "detail": "没开机或 5555 没开"})
                 rows.append(row)

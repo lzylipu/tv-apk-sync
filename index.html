@@ -51,25 +51,33 @@ button.ghost{background:var(--fill);color:var(--ink)}button.warn{background:rgba
 :root[data-theme="dark"] button.warn{color:#ffd60a}:root[data-theme="dark"] button.bad{color:#ff6961}
 .actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
 .card{border:1px solid var(--line);border-radius:16px;padding:12px;margin:0 0 8px;background:var(--fill)}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.facts div{background:var(--field);border-radius:12px;padding:8px 10px;min-width:0}
+.facts b{display:block;color:var(--muted);font-size:12px;font-weight:500}
+.facts span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ok{color:var(--ok)}.bad{color:var(--bad)}.muted{color:var(--muted)}
 pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:12px;min-height:160px;margin:0}
-.toast{position:fixed;right:16px;bottom:16px;background:var(--glass);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:10px 14px;display:none;backdrop-filter:blur(20px)}
+.toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:40;min-width:220px;max-width:min(560px,calc(100vw - 32px));background:#fff;color:#1d1d1f;border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:12px 16px;display:none;box-shadow:0 16px 40px -12px rgba(0,0,0,.35);font-weight:600}
+.toast.ok{background:#34c759;color:#fff;border-color:#248a3d}
+.toast.bad{background:#ff3b30;color:#fff;border-color:#d70015}
 .toolbar{display:flex;gap:8px;align-items:center;margin:0 0 12px;flex-wrap:wrap}
 .toolbar input{max-width:280px}
 .tree{display:flex;flex-direction:column;gap:12px}
 .source{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--fill)}
 .source h3{margin:0;padding:12px 14px;background:transparent;font-size:16px}
 .source .meta{padding:0 14px 10px;color:var(--muted);font-size:12px;word-break:break-all}
-.file{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.file{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.file .muted,.file .pkg{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .appcard{border:1px solid var(--line);border-radius:16px;padding:12px;background:var(--fill);display:flex;flex-direction:column;gap:8px}
 .appcard b{font-size:15px}.pkg{font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);word-break:break-all}
-.ops{display:flex;gap:6px;flex-wrap:wrap}
-.ops button,.ops a{padding:6px 9px;font-size:13px}
+.appcard .ops{flex-wrap:wrap}
+.ops{display:flex;gap:6px;flex-wrap:nowrap;flex:none}
+.ops button,.ops a{padding:6px 9px;font-size:13px;white-space:nowrap}
 .ops a{background:var(--fill);color:var(--ink);border:1px solid var(--line)}
 .proclist{display:flex;flex-direction:column;gap:6px;max-height:68vh;overflow:auto}
 .procrow{display:grid;grid-template-columns:84px 70px 1fr auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:8px 10px;background:var(--fill)}
 .mem{font-variant-numeric:tabular-nums;font-weight:650}
-@media(max-width:760px){.shell{grid-template-columns:1fr}aside{margin:8px}.row,.app-row,.procrow{grid-template-columns:1fr}}
+@media(max-width:760px){.shell{grid-template-columns:1fr}aside{margin:8px}.row,.app-row,.procrow{grid-template-columns:1fr}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 <div class="stage"></div>
 <div class="shell">
@@ -187,6 +195,7 @@ applyTheme(localStorage.getItem("tv-theme")||"light");
 let cfg={devices:[],apps:[],notify:{},pull_hours:24,install_minutes:10};
 let loaded=false;
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+const attr=s=>encodeURIComponent(String(s??""));
 function show(id,btn){
   document.querySelectorAll(".pane").forEach(el=>el.classList.toggle("on",el.id===id));
   document.querySelectorAll("nav button").forEach(el=>el.classList.toggle("on",el===btn));
@@ -288,7 +297,17 @@ function parseYaml(text){
   });
   return data;
 }
-function toast(text){const el=document.getElementById("toast");el.textContent=text;el.style.display="block";setTimeout(()=>el.style.display="none",2500)}
+function toast(text, ok){
+  const el=document.getElementById("toast");
+  const raw=String(text??"").trim();
+  const fail=/失败|错误|不在线|没有|不是|找不到|Exception|Error|error|FAIL|denied|offline/i.test(raw);
+  const good=ok===true || (ok!==false && !fail);
+  el.textContent=(good?"成功：":"失败：")+raw;
+  el.className="toast "+(good?"ok":"bad");
+  el.style.display="block";
+  clearTimeout(window.toastTimer);
+  window.toastTimer=setTimeout(()=>el.style.display="none", 4000);
+}
 async function save(){
   collect();
   const res=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(cfg)});
@@ -322,8 +341,28 @@ async function refreshLive(){
     if(old) box.value=old;
   });
   if(prev) sel.value=prev;
-  document.getElementById("live").innerHTML=live.map(d=>`<div class="card"><b>${esc(d.name||d.ip)}</b><br>${d.online?`<span class="ok">在线</span> ${esc(d.model||"")} Android ${esc(d.android||"")} ${esc(d.abi||"")}`:`<span class="bad">不在线</span> <span class="muted">${esc(d.detail||"")}</span>`}</div>`).join("")||'<p class="muted">保存设备后这里显示是否在线</p>';
+  document.getElementById("live").innerHTML=live.map(deviceCard).join("")||'<p class="muted">保存设备后这里显示是否在线</p>';
   document.getElementById("logbox").textContent=await (await fetch("/api/log")).text();
+}
+function gb(kb){return kb? (kb/1048576).toFixed(1)+" GB" : ""}
+function uptimeText(sec){
+  sec=+sec||0;
+  const d=Math.floor(sec/86400), h=Math.floor(sec%86400/3600), m=Math.floor(sec%3600/60);
+  return (d?d+" 天 ":"")+(h?h+" 小时 ":"")+m+" 分钟";
+}
+function deviceCard(d){
+  if(!d.online) return `<div class="card"><b>${esc(d.name||d.ip)}</b><br><span class="bad">不在线</span> <span class="muted">${esc(d.detail||"")}</span></div>`;
+  const mem=d.mem_total? `${gb(d.mem_used)} / ${gb(d.mem_total)}` : "";
+  const disk=d.disk_total? `${gb(d.disk_used)} / ${gb(d.disk_total)}` : "";
+  const rows=[
+    ["型号", d.model],
+    ["安卓", d.android? `Android ${d.android}` : ""],
+    ["CPU", d.abi],
+    ["内存", mem],
+    ["存储", disk],
+    ["已开机", d.uptime? uptimeText(d.uptime): ""]
+  ];
+  return `<div class="card"><b>${esc(d.name||d.ip)}</b> <span class="ok">在线</span><div class="facts">${rows.map(item=>`<div><b>${esc(item[0])}</b><span>${esc(item[1]||"—")}</span></div>`).join("")}</div></div>`;
 }
 function currentAddress(){return document.getElementById("appDevice").value || document.getElementById("shellDevice").value}
 let packageRows=[];
@@ -333,15 +372,17 @@ let processOffline=false;
 async function appAction(action, pkg){
   const names={uninstall:"卸载",cache:"清缓存",clear:"清除数据",disable:"停用",enable:"启用",stop:"强停"};
   if((action==="uninstall"||action==="clear"||action==="disable") && !confirm(`确定${names[action]} ${pkg}？`)) return;
+  toast("正在"+names[action]+"…", true);
   const res=await fetch("/api/app-action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address:currentAddress(),package:pkg,action})});
-  toast(await res.text());
-  if(action==="uninstall") loadPackages(window.pkgKind||"user");
+  const text=await res.text();
+  toast(names[action]+"： "+text, res.ok && !/fail|error|失败/i.test(text));
+  if(action==="uninstall" && res.ok) loadPackages(window.pkgKind||"user");
 }
 function renderPackages(){
   if(packageOffline){document.getElementById("pkgList").innerHTML='<p class="muted">不在线</p>';return}
   const q=(document.getElementById("appQuery").value||"").trim().toLowerCase();
   const rows=packageRows.filter(r=>!q || (r.label||"").toLowerCase().includes(q) || r.package.toLowerCase().includes(q));
-  document.getElementById("pkgList").innerHTML=rows.map(r=>`<article class="appcard"><div><b>${esc(r.label||r.package)}</b><div class="muted">${esc(r.version||"没有读到版本")}</div><div class="pkg">${esc(r.package)}</div></div><div class="ops"><button class="ghost" onclick="appAction('stop',${JSON.stringify(r.package)})">强停</button><button class="ghost" onclick="appAction('cache',${JSON.stringify(r.package)})">清缓存</button><button class="warn" onclick="appAction('clear',${JSON.stringify(r.package)})">清数据</button><button class="ghost" onclick="appAction('disable',${JSON.stringify(r.package)})">停用</button><button class="ghost" onclick="appAction('enable',${JSON.stringify(r.package)})">启用</button><button class="bad" onclick="appAction('uninstall',${JSON.stringify(r.package)})">卸载</button></div></article>`).join("")||'<p class="muted">没有匹配的应用</p>';
+  document.getElementById("pkgList").innerHTML=rows.map(r=>`<article class="appcard"><div><b>${esc(r.label||r.package)}</b><div class="muted">${esc(r.version||"没有读到版本")}</div><div class="pkg">${esc(r.package)}</div></div><div class="ops"><button class="ghost" data-act="stop" data-pkg="${attr(r.package)}">强停</button><button class="ghost" data-act="cache" data-pkg="${attr(r.package)}">清缓存</button><button class="warn" data-act="clear" data-pkg="${attr(r.package)}">清数据</button><button class="ghost" data-act="disable" data-pkg="${attr(r.package)}">停用</button><button class="ghost" data-act="enable" data-pkg="${attr(r.package)}">启用</button><button class="bad" data-act="uninstall" data-pkg="${attr(r.package)}">卸载</button></div></article>`).join("")||'<p class="muted">没有匹配的应用</p>';
 }
 async function loadPackages(kind){
   window.pkgKind=kind;
@@ -357,7 +398,7 @@ function renderProcesses(){
   if(processOffline){document.getElementById("procBox").innerHTML='<p class="muted">不在线</p>';return}
   const q=(document.getElementById("procQuery").value||"").trim().toLowerCase();
   const rows=processRows.filter(r=>!q || r.name.toLowerCase().includes(q) || r.user.toLowerCase().includes(q));
-  document.getElementById("procBox").innerHTML=rows.map(r=>`<div class="procrow"><span class="mem">${(r.rss/1024).toFixed(1)} MB</span><span class="muted">${esc(r.pid)}</span><span class="pkg">${esc(r.name)}</span><button class="bad" onclick='killProc(${JSON.stringify(r.pid)},${JSON.stringify(r.name)})'>停止</button></div>`).join("")||'<p class="muted">没有匹配的进程</p>';
+  document.getElementById("procBox").innerHTML=rows.map(r=>`<div class="procrow"><span class="mem">${(r.rss/1024).toFixed(1)} MB</span><span class="muted">${esc(r.pid)}</span><span class="pkg">${esc(r.name)}</span><button class="bad" data-kill="${attr(r.pid)}" data-name="${attr(r.name)}">停止</button></div>`).join("")||'<p class="muted">没有匹配的进程</p>';
 }
 async function loadProcesses(){
   const address=document.getElementById("procDevice").value||currentAddress();
@@ -370,9 +411,11 @@ async function loadProcesses(){
 }
 async function killProc(pid,name){
   if(!confirm(`停止 ${name}？`)) return;
+  toast("正在停止…", true);
   const res=await fetch("/api/kill",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address:document.getElementById("procDevice").value||currentAddress(),pid,name})});
-  toast(await res.text());
-  loadProcesses();
+  const text=await res.text();
+  toast("停止： "+text, res.ok && !/fail|error|失败/i.test(text));
+  if(res.ok) loadProcesses();
 }
 async function loadCache(){
   const box=document.getElementById("cacheList");
@@ -407,13 +450,16 @@ async function loadCache(){
     hit.files.push(row);
     used.add(row.id);
   }
-  box.innerHTML=[...groups.values()].map(g=>`<section class="source"><h3>${esc(g.name||"未命名")}</h3><div class="meta">${esc(g.source||"没有填写链接")}</div>${g.files.map(r=>`<div class="file"><div><b>${esc(r.label||r.file)}</b><div class="muted">${esc(r.version||"没读到版本")} · ${mb(r.size)} · ${esc(r.file)}</div><div class="pkg">${esc(r.package||"没读到包名")}</div></div><div class="ops"><button onclick="cacheAction('push',${JSON.stringify(r.id)})">推送</button><a class="ghost" style="padding:6px 9px;border-radius:8px;text-decoration:none" href="/api/cache?id=${encodeURIComponent(r.id)}">下载</a><button class="bad" onclick="cacheAction('delete',${JSON.stringify(r.id)})">删除</button></div></div>`).join("")||'<div class="file"><span class="muted">还没拉到包</span></div>'}</section>`).join("")||'<p class="muted">先在软件里保存名称和链接</p>';
+  box.innerHTML=[...groups.values()].map(g=>`<section class="source"><h3>${esc(g.name||"未命名")}</h3><div class="meta">${esc(g.source||"没有填写链接")}</div>${g.files.map(r=>`<div class="file"><div><b>${esc(r.label||r.file)}</b><div class="muted">${esc(r.version||"没读到版本")} · ${mb(r.size)} · ${esc(r.file)}</div><div class="pkg">${esc(r.package||"没读到包名")}</div></div><div class="ops"><button data-cache="push" data-id="${attr(r.id)}">推送</button><a class="ghost" style="padding:6px 9px;border-radius:8px;text-decoration:none" href="/api/cache?id=${encodeURIComponent(r.id)}">下载</a><button class="bad" data-cache="delete" data-id="${attr(r.id)}">删除</button></div></div>`).join("")||'<div class="file"><span class="muted">还没拉到包</span></div>'}</section>`).join("")||'<p class="muted">先在软件里保存名称和链接</p>';
 }
 async function cacheAction(action,id){
   if(action==="delete" && !confirm("只删缓存里的这个包？")) return;
+  const names={push:"推送",delete:"删除"};
+  toast("正在"+(names[action]||"处理")+"…", true);
   const res=await fetch("/api/cache-action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,id,address:document.getElementById("cacheDevice").value})});
-  toast(await res.text());
-  if(action==="delete") loadCache();
+  const text=await res.text();
+  toast((names[action]||"操作")+"： "+text, res.ok && !/fail|error|失败/i.test(text));
+  if(action==="delete" && res.ok) loadCache();
 }
 async function runShell(){
   const address=currentAddress();
@@ -482,4 +528,12 @@ function armRefresh(){
   window.refreshTimer=setInterval(()=>{if(loaded)refreshLive()}, minutes*60000);
 }
 armRefresh();
+document.addEventListener("click", event=>{
+  const act=event.target.closest("[data-act]");
+  if(act){appAction(act.dataset.act, decodeURIComponent(act.dataset.pkg||""));return}
+  const cache=event.target.closest("[data-cache]");
+  if(cache){cacheAction(cache.dataset.cache, decodeURIComponent(cache.dataset.id||""));return}
+  const kill=event.target.closest("[data-kill]");
+  if(kill) killProc(decodeURIComponent(kill.dataset.kill||""), decodeURIComponent(kill.dataset.name||""));
+});
 </script>
