@@ -59,7 +59,7 @@ class PickTests(unittest.TestCase):
 
             def fake_http(url, token=""):
                 calls.append(("http", url))
-                return {"tag_name": "v2", "assets": [{"name": "app.apk", "browser_download_url": "http://x", "size": 1}]}
+                return [{"tag_name": "v2", "assets": [{"name": "app.apk", "browser_download_url": "http://x", "size": 1}]}]
 
             def fake_installed(address, package):
                 return "2.0"
@@ -73,7 +73,7 @@ class PickTests(unittest.TestCase):
             app.apk_identity = lambda path: {"package": "com.example.app", "version": "2.0", "label": "示例"}
             app.adb = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not install"))
             app.once()
-            self.assertEqual(calls, [("http", "https://api.github.com/repos/owner/app/releases/latest")])
+            self.assertEqual(calls, [("http", "https://api.github.com/repos/owner/app/releases?per_page=30")])
             self.assertIn("跳过", (root / "sync.log").read_text(encoding="utf-8"))
 
 

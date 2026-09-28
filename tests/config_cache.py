@@ -93,6 +93,27 @@ class LogicTests(unittest.TestCase):
         kept = [item["name"] for item in app.arm_assets(matched[0]["assets"]) if app.release_shape(item["name"]) == shape]
         self.assertEqual(kept, [other, given])
 
+    def test_repo_with_several_lines_picks_tv(self):
+        releases = [
+            {"tag_name": "v1.13.1", "assets": [{"name": "SimpleLive-v1.13.1-arm64-v8a-release.apk", "browser_download_url": "https://example/phone", "size": 1}]},
+            {"tag_name": "tv_v1.8.1", "assets": [
+                {"name": "SimpleLive-TV-tv_v1.8.1-arm64-v8a-release.apk", "browser_download_url": "https://example/tv64", "size": 2},
+                {"name": "SimpleLive-TV-tv_v1.8.1-armeabi-v7a-release.apk", "browser_download_url": "https://example/tv32", "size": 3},
+            ]},
+        ]
+        group = app.choose_group(app.release_groups(releases)) or {}
+        names = [item["name"] for item in app.arm_assets(group.get("assets") or [])]
+        self.assertEqual(group.get("tag"), "tv_v1.8.1")
+        self.assertEqual(names, [
+            "SimpleLive-TV-tv_v1.8.1-arm64-v8a-release.apk",
+            "SimpleLive-TV-tv_v1.8.1-armeabi-v7a-release.apk",
+        ])
+
+    def test_single_release_line_is_used(self):
+        releases = [{"tag_name": "v2", "assets": [{"name": "only-arm64-v8a.apk", "browser_download_url": "https://example/a", "size": 1}]}]
+        group = app.choose_group(app.release_groups(releases)) or {"assets": []}
+        self.assertEqual(group["assets"][0]["name"], "only-arm64-v8a.apk")
+
 
 if __name__ == "__main__":
     unittest.main()

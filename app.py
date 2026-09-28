@@ -463,6 +463,31 @@ def release_shape(name):
     return text
 
 
+def asset_payload(item):
+    return {"name": item["name"], "url": item["browser_download_url"], "size": item.get("size") or 0}
+
+
+def release_groups(releases):
+    groups = []
+    for release in releases:
+        assets = [item for item in (release.get("assets") or []) if str(item.get("name", "")).lower().endswith(".apk")]
+        buckets = {}
+        for item in assets:
+            buckets.setdefault(release_shape(item["name"]), []).append(item)
+        for shape, items in buckets.items():
+            groups.append({"tag": release.get("tag_name") or "", "shape": shape, "assets": items})
+    return groups
+
+
+def choose_group(groups):
+    if not groups:
+        return None
+    if len(groups) == 1:
+        return groups[0]
+    tv = [item for item in groups if re.search(r"(?i)(^|[^a-z])tv([^a-z]|$)", item["shape"])]
+    return tv[0] if tv else groups[0]
+
+
 def release_line(source):
     match = re.search(r"github\.com/([^/\s]+)/([^/\s#?]+)/releases/download/([^/\s]+)/([^?\s]+)", source.strip())
     if not match or not match.group(4).lower().split("?")[0].endswith(".apk"):
@@ -480,38 +505,69 @@ def resolve_release(source, family, token):
     line = release_line(source)
     repo = line["repo"] if line else github_repo(source)
     if repo:
+        releases = http_json(f"https://api.github.com/repos/{repo}/releases?per_page=30", token)
         if line:
-            releases = http_json(f"https://api.github.com/repos/{repo}/releases?per_page=30", token)
-            same = [item for item in releases if any(release_shape(asset.get("name", "")) == line["shape"] for asset in item.get("assets") or [])]
-            release = same[0] if same else next((item for item in releases if item.get("tag_name") == line["tag"]), None)
-            if not release:
+            groups = [item for item in release_groups(releases) if item["shape"] == line["shape"]]
+            group = groups[0] if groups else None
+            if not group:
                 return {"key": repo + "|" + line["shape"], "tag": "", "error": f"{repo} 没有找到和 {line['name']} 同一类的更新"}
         else:
-            release = http_json(f"https://api.github.com/repos/{repo}/releases/latest", token)
-        tag = release.get("tag_name") or ""
-        assets = arm_assets(release.get("assets") or [])
-        if line:
-            assets = [item for item in assets if release_shape(item.get("name", "")) == line["shape"]] or assets
+            group = choose_group(release_groups(releases))
+            if not group:
+                return {"key": repo, "tag": "", "error": f"{repo} 没有 APK"}
+        assets = arm_assets(group["assets"])
         if not assets:
-            return {"key": repo, "tag": tag, "error": f"{repo} {tag} 没有 APK"}
+            return {"key": repo, "tag": group["tag"], "error": f"{repo} {group['tag']} 没有 APK"}
         key = repo if not line else f"{repo}|{line['shape']}"
         return {
             "key": key,
-            "tag": tag,
+            "tag": group["tag"],
             "name": assets[0]["name"],
             "url": assets[0]["browser_download_url"],
             "size": assets[0].get("size") or 0,
-            "assets": [
-                {"name": item["name"], "url": item["browser_download_url"], "size": item.get("size") or 0}
-                for item in assets
-            ],
+            "assets": [asset_payload(item) for item in assets],
         }
     if not source.lower().split("?", 1)[0].endswith(".apk"):
         return {"key": source, "tag": "", "error": f"{source} 不是 GitHub 仓库，也不是 APK 直链"}
     name = urllib.parse.unquote(source.rstrip("/").split("/")[-1].split("?")[0]) or "app.apk"
     url = source.replace("/blob/", "/raw/")
-    size = remote_size(url)
-    return {"key": source, "tag": name, "name": name, "url": url, "size": size, "assets": [{"name": name, "url": url, "size": size}]}
+    siblings = directory_apks(url)
+    same = [item for item in siblings if release_shape(item["name"]) == release_shape(name)]
+    files = arm_assets(same) or [{"name": name, "browser_download_url": url, "size": remote_size(url)}]
+    return {
+        "key": source,
+        "tag": name,
+        "name": files[0]["name"],
+        "url": files[0]["browser_download_url"],
+        "size": files[0].get("size") or 0,
+        "assets": [asset_payload(item) for item in files],
+    }
+
+
+def directory_apks(url):
+    parts = urllib.parse.urlsplit(url)
+    host = parts.netloc.lower()
+    path = urllib.parse.unquote(parts.path)
+    if host != "github.com" or "/raw/" not in path:
+        return []
+    match = re.match(r"^/([^/]+)/([^/]+)/raw/([^/]+)(/.*)?$", path)
+    if not match:
+        return []
+    owner, repo, ref, folder = match.group(1), match.group(2), match.group(3), match.group(4)
+    folder = (folder or "/").rsplit("/", 1)[0] or "/"
+    api = f"https://api.github.com/repos/{owner}/{repo}/contents{urllib.parse.quote(folder)}?ref={ref}"
+    try:
+        rows = http_json(api)
+    except Exception:
+        return []
+    if not isinstance(rows, list):
+        return []
+    files = []
+    for row in rows:
+        if row.get("type") != "file" or not str(row.get("name", "")).lower().endswith(".apk"):
+            continue
+        files.append({"name": row["name"], "browser_download_url": row.get("download_url") or "", "size": row.get("size") or 0})
+    return files
 
 
 def prune_old_apks(source, files, tag, label):
