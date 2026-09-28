@@ -12,7 +12,7 @@ A local web console for Android TV and projectors on the same LAN. It lists apps
 
 ## 📖 简介 / Overview
 
-网页左边是导航，右边按页操作。设备、软件、通知先保存。本地包按你填的名称和链接分层，能下载、删除、推送到选中的设备。已装应用可以强停、清缓存、清数据、停用、启用、卸载。进程按内存从大到小排。
+网页左边是导航，右边按页操作。设备、软件、通知先保存。软件页可以一次导入多个本地 APK。本地包能下载、删除、推送到选中的设备。已装应用可以强停、清缓存、清数据、停用、启用、卸载。进程按内存从大到小排。设备没开时，这两页显示「不在线」。
 
 The left side is navigation. Devices, sources, and notices are saved first. Cached packages stay grouped under the name and link you entered. Installed apps can be stopped, cleared, disabled, or removed. Processes are ordered by memory.
 
@@ -23,7 +23,11 @@ The left side is navigation. Devices, sources, and notices are saved first. Cach
 - 🔁 GitHub 直链会记住文件名骨架。`1.8.1` 后面变成 `1.8.2`、`1.9.1`，仍认同一条发布线
 - 🧠 下载后用 `aapt` 读安卓包名和版本，再和电视上的版本比
 - ⏰ 查版本默认 24 小时一次。设备开着时，短间隔只负责安装已经下好的包
-- 🔔 飞书、PushPlus、Bark 三个填一个。没填就只写页面里的记录
+- 🔔 飞书、PushPlus、Bark 三个填一个。没填就只写页面里的日志
+- 📤 通知页可以导出、导入设备和软件、通知、两个间隔。文件就是 `config.yaml`。导入后还要点保存
+- 📥 软件页可以拖入多个 APK。文件放在 `apk` 根目录，本地包页可以查看、推送、下载、删除
+- 🧾 日志只显示最近 50 条，最新的在最上面
+- 🧹 同一软件只留当前这一版。64 位和 32 位都留，旧版删掉
 - 🛑 签名不一致不卸载，避免把应用数据清掉
 
 ## 🚀 快速开始 / Quick Start
@@ -67,18 +71,18 @@ docker run -d \
 
 私有仓库再加一行 `-e GITHUB_TOKEN=你的token`。公开仓库不用。
 
-浏览器打开 `http://宿主机IP:8088`。第一次进去，「设备」填电视 IP 和 `5555`，「软件」填名称和链接，点保存。配置会写到挂载目录里的 `config.json`，不用手改文件。
+浏览器打开 `http://宿主机IP:8088`。第一次进去，「设备」填电视 IP 和 `5555`，「软件」填名称和链接，「通知」填推送和间隔，点保存。配置会写到挂载目录里的 `config.yaml`，不用手改文件。
 
 ### 目录里有什么 / What is in data
 
 | 文件 | 作用 |
 |---|---|
-| `config.json` | 设备、软件链接、通知、查版本间隔。第一次打开网页自动生成 |
+| `config.yaml` | 设备、软件链接、通知、查版本间隔、设备检测间隔。第一次启动自动生成 |
 | `state.json` | 上次查版本的时间、每台设备已装到哪一版 |
-| `apk/` | 已经下载的安装包。网页「本地包」里的推送、下载、删除都对这里 |
-| `sync.log` | 页面「记录」读的日志 |
+| `apk/` | 已经下载或上传的安装包。链接拉下来的按软件分目录，只留当前这一版，64 位和 32 位都留。页面导入的 APK 直接放在这个目录下 |
+| `sync.log` | 页面「日志」读的文件，页面只显示最近 50 条 |
 
-`config.example.json` 只是仓库里的例子，容器不读它。
+`config.example.yaml` 只是仓库里的例子，容器不读它。第一次启动会在挂载目录生成空的 `config.yaml`。
 
 ### 用 compose / Compose
 
@@ -94,11 +98,11 @@ compose 里已经写了同样的端口 `8088:8080` 和目录 `./data:/data`。�
 
 公开仓库不用 token。私有仓库在 `docker run` 或 compose 里加 `GITHUB_TOKEN`。
 
-电视没开时这一轮只记「不在线」，不发失败通知。查到新版会先下到 `data/apk`。设备开着时，默认每 5 分钟装一次已经下好、版本更高的包。查 GitHub 默认 24 小时一次，不跟着这 5 分钟走。
+电视没开时这一轮只记「不在线」，不发失败通知。查到新版会先下到 `data/apk`。设备开着时，按通知页里的设备检测间隔安装已经下好、版本更高的包。查 GitHub 按通知页里的查版本间隔，不跟着设备检测走。
 
 ## ⚙️ 配置 / Configuration
 
-网页里能改。文件在挂载目录的 `config.json`，不是容器里面一份会丢的文件。
+网页里能改。文件在挂载目录的 `config.yaml`，不是容器里面一份会丢的文件。
 
 | 字段 | 作用 |
 |---|---|
@@ -109,7 +113,7 @@ compose 里已经写了同样的端口 `8088:8080` 和目录 `./data:/data`。�
 | `notify.pushplus` | PushPlus token |
 | `notify.bark` | Bark 地址，形如 `https://api.day.app/你的key` |
 | `pull_hours` | 查版本间隔，默认 24 小时 |
-| `install_minutes` | 设备在线时尝试安装的间隔，默认 5 分钟 |
+| `install_minutes` | 设备检测间隔，通知页配置，状态刷新和安装都用这个值 |
 | `GITHUB_TOKEN` | 只有私有仓库需要，环境变量，不写进网页 |
 
 GitHub 发布页直链会按文件名骨架跟踪新版本。不是 GitHub 发布页的直链，只下载你填的那一个文件。
@@ -128,7 +132,7 @@ tv-apk-sync/
 ├── index.html
 ├── Dockerfile
 ├── docker-compose.yml
-├── config.example.json
+├── config.example.yaml
 ├── tests/
 └── .github/workflows/docker-publish.yml
 ```

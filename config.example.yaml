@@ -1,0 +1,13 @@
+devices:
+  - name: 电视
+    ip: 10.10.0.20
+    port: 5555
+apps:
+  - name: 示例
+    source: https://github.com/owner/app/releases/download/v1.0.0/app-v1.0.0-armeabi-v7a-release.apk
+notify:
+  feishu: ""
+  pushplus: ""
+  bark: ""
+pull_hours: 24
+install_minutes: 10

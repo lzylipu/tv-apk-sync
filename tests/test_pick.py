@@ -38,20 +38,17 @@ class PickTests(unittest.TestCase):
 
     def test_signature_conflict_is_not_an_uninstall(self):
         text = "Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match]"
-        self.assertIn("没动", app.install_reason(text))
+        self.assertIn("没有自动卸载", app.install_reason(text))
 
     def test_skip_when_same_tag_already_installed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "config.json").write_text(json.dumps({
-                "devices": [{"name": "电视", "address": "10.0.0.8:5555"}],
-                "apps": [{"repo": "owner/app", "package": "com.example.app"}],
-            }), encoding="utf-8")
+            (root / "config.yaml").write_text("devices:\n  - name: 电视\n    ip: 10.0.0.8\n    port: 5555\napps:\n  - name: 示例\n    source: owner/app\n", encoding="utf-8")
             (root / "state.json").write_text(json.dumps({
                 "apps": {"10.0.0.8:5555|owner/app": {"tag": "v2", "installed": "2.0"}}
             }), encoding="utf-8")
             app.DATA = root
-            app.CONFIG = root / "config.json"
+            app.CONFIG = root / "config.yaml"
             app.STATE = root / "state.json"
             app.CACHE = root / "apk"
             app.LOG = root / "sync.log"
@@ -70,6 +67,10 @@ class PickTests(unittest.TestCase):
             app.device_profile = fake_profile
             app.http_json = fake_http
             app.installed_version = fake_installed
+            app.download = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("包已在缓存，不该再下"))
+            (root / "apk" / "owner_app").mkdir(parents=True)
+            (root / "apk" / "owner_app" / "v2-app.apk").write_bytes(b"apk")
+            app.apk_identity = lambda path: {"package": "com.example.app", "version": "2.0", "label": "示例"}
             app.adb = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not install"))
             app.once()
             self.assertEqual(calls, [("http", "https://api.github.com/repos/owner/app/releases/latest")])

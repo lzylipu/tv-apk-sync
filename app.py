@@ -9,13 +9,14 @@ import subprocess
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 DATA = Path(os.environ.get("DATA_DIR", "/data"))
-CONFIG = DATA / "config.json"
+CONFIG = DATA / "config.yaml"
 STATE = DATA / "state.json"
 CACHE = DATA / "apk"
 LOG = DATA / "sync.log"
@@ -27,7 +28,7 @@ DEFAULT = {
     "apps": [],
     "notify": {"feishu": "", "pushplus": "", "bark": ""},
     "pull_hours": 24,
-    "install_minutes": 5,
+    "install_minutes": 10,
 }
 
 
@@ -46,12 +47,89 @@ def load_json(path, default):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def yaml_quote(value):
+    text = str(value)
+    if text == "" or any(ch in text for ch in ":#{}[]&*!|>%@`'\"\n\t") or text.strip() != text:
+        return json.dumps(text, ensure_ascii=False)
+    return text
+
+
+def dump_yaml(data):
+    lines = []
+    for key in ("devices", "apps", "notify", "pull_hours", "install_minutes"):
+        value = data.get(key)
+        if key in ("devices", "apps"):
+            lines.append(f"{key}:")
+            if not value:
+                lines.append("  []")
+                continue
+            fields = ("name", "ip", "port") if key == "devices" else ("name", "source")
+            for item in value:
+                first = True
+                for field in fields:
+                    mark = "- " if first else "  "
+                    first = False
+                    lines.append(f"  {mark}{field}: {yaml_quote(item.get(field, ''))}")
+        elif key == "notify":
+            lines.append("notify:")
+            notify = value or {}
+            for field in ("feishu", "pushplus", "bark"):
+                lines.append(f"  {field}: {yaml_quote(notify.get(field, ''))}")
+        else:
+            lines.append(f"{key}: {int(value or 0)}")
+    return "\n".join(lines) + "\n"
+
+
+def parse_yaml(text):
+    data = {"devices": [], "apps": [], "notify": {}}
+    section = ""
+    current = None
+    for raw in text.splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        if not raw.startswith(" "):
+            key, _, value = raw.partition(":")
+            section = key.strip()
+            current = None
+            if section in ("pull_hours", "install_minutes"):
+                data[section] = int(value.strip() or 0)
+            continue
+        body = raw.strip()
+        if body == "[]":
+            continue
+        item = body[2:] if body.startswith("- ") else body
+        key, _, value = item.partition(":")
+        value = value.strip()
+        if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+            value = json.loads(value) if value.startswith('"') else value[1:-1]
+        if section in ("devices", "apps") and body.startswith("- "):
+            current = {}
+            data[section].append(current)
+        target = current if section in ("devices", "apps") else data.setdefault(section, {})
+        if target is not None and key.strip():
+            target[key.strip()] = int(value) if key.strip() == "port" and str(value).isdigit() else value
+    return data
+
+
 def current_config():
-    data = load_json(CONFIG, DEFAULT)
+    path = CONFIG if CONFIG.exists() else DATA / "config.json"
+    if path.suffix == ".json":
+        data = load_json(path, DEFAULT)
+    elif path.exists():
+        data = parse_yaml(path.read_text(encoding="utf-8"))
+    else:
+        data = json.loads(json.dumps(DEFAULT))
     for key, value in DEFAULT.items():
         data.setdefault(key, json.loads(json.dumps(value)))
     data.pop("github_token", None)
     return data
+
+
+def save_config(data):
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    tmp = CONFIG.with_suffix(".tmp")
+    tmp.write_text(dump_yaml(data), encoding="utf-8")
+    tmp.replace(CONFIG)
 
 
 def save_json(path, data):
@@ -71,13 +149,19 @@ def http_json(url, token=""):
 
 def download(url, dest, token=""):
     dest.parent.mkdir(parents=True, exist_ok=True)
+    parts = urllib.parse.urlsplit(url)
+    url = urllib.parse.urlunsplit(parts._replace(path=urllib.parse.quote(urllib.parse.unquote(parts.path), safe="/%")))
     req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/octet-stream"})
     if token and "github" in url:
         req.add_header("Authorization", f"Bearer {token}")
     tmp = dest.with_name(dest.name + ".part")
-    with urllib.request.urlopen(req, timeout=180) as resp, tmp.open("wb") as handle:
-        shutil.copyfileobj(resp, handle)
-    tmp.replace(dest)
+    try:
+        with urllib.request.urlopen(req, timeout=180) as resp, tmp.open("wb") as handle:
+            shutil.copyfileobj(resp, handle)
+        tmp.replace(dest)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def adb(*args, timeout=60):
@@ -156,23 +240,28 @@ def pick_asset(assets, family):
     return ranked[0][1]
 
 
-def matching_assets(assets, family):
-    ranked = []
-    for asset in assets:
-        if not asset.get("name", "").lower().endswith(".apk"):
-            continue
-        score = asset_score(asset.get("name", ""), family)
-        ranked.append((0 if score is None else score + 1, asset))
-    ranked.sort(key=lambda item: item[0], reverse=True)
-    return [asset for _, asset in ranked]
+def arm_assets(assets):
+    seen = []
+    for family in ("arm64", "arm"):
+        picked = pick_asset(assets, family)
+        if picked and picked not in seen:
+            seen.append(picked)
+    return seen
+
+
+def asset_for_device(assets, family):
+    if family in ("arm64", "arm", ""):
+        return pick_asset(assets, family or "arm64") or pick_asset(assets, "arm")
+    return pick_asset(assets, family)
 
 
 def cache_key(source):
     repo = github_repo(source)
     if repo:
         return re.sub(r"[^A-Za-z0-9._-]+", "_", repo)[:80]
-    name = source.strip().split("?", 1)[0].rstrip("/").split("/")[-1]
-    return re.sub(r"[^A-Za-z0-9._-]+", "_", name)[:80]
+    name = urllib.parse.unquote(source.strip().split("?", 1)[0].rstrip("/").split("/")[-1])
+    name = re.sub(r"[\\/:*?\"<>|]+", "_", name).strip()
+    return (name or "apk")[:80]
 
 
 def cache_dest(source, tag, name):
@@ -292,13 +381,17 @@ def source_of(app):
 
 def github_repo(source):
     text = source.strip().rstrip("/")
-    if ".apk" in text.lower().split("?", 1)[0]:
+    path = text.lower().split("?", 1)[0]
+    if ".apk" in path and "/blob/" not in path and "/raw/" not in path:
         return ""
     match = re.search(r"github\.com/([^/\s]+)/([^/\s#?]+)", text)
     if match:
         repo = match.group(2)
         if repo.endswith(".git"):
             repo = repo[:-4]
+        rest = text.split(match.group(0), 1)[1].lstrip("/")
+        if rest and not rest.startswith(("releases", "tags")):
+            return ""
         return f"{match.group(1)}/{repo}"
     if re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", text):
         return text
@@ -394,11 +487,11 @@ def resolve_release(source, family, token):
         else:
             release = http_json(f"https://api.github.com/repos/{repo}/releases/latest", token)
         tag = release.get("tag_name") or ""
-        assets = matching_assets(release.get("assets") or [], family)
+        assets = arm_assets(release.get("assets") or [])
         if line:
             assets = [item for item in assets if release_shape(item.get("name", "")) == line["shape"]] or assets
         if not assets:
-            return {"key": repo, "tag": tag, "error": f"{repo} {tag} 没有适合 {family} 的 APK"}
+            return {"key": repo, "tag": tag, "error": f"{repo} {tag} 没有 APK"}
         key = repo if not line else f"{repo}|{line['shape']}"
         return {
             "key": key,
@@ -413,12 +506,28 @@ def resolve_release(source, family, token):
         }
     if not source.lower().split("?", 1)[0].endswith(".apk"):
         return {"key": source, "tag": "", "error": f"{source} 不是 GitHub 仓库，也不是 APK 直链"}
-    name = source.rstrip("/").split("/")[-1].split("?")[0] or "app.apk"
-    size = remote_size(source)
-    return {"key": source, "tag": name, "name": name, "url": source, "size": size, "assets": [{"name": name, "url": source, "size": size}]}
+    name = urllib.parse.unquote(source.rstrip("/").split("/")[-1].split("?")[0]) or "app.apk"
+    url = source.replace("/blob/", "/raw/")
+    size = remote_size(url)
+    return {"key": source, "tag": name, "name": name, "url": url, "size": size, "assets": [{"name": name, "url": url, "size": size}]}
 
 
-def once():
+def prune_old_apks(source, files, tag, label):
+    kept = set()
+    for item in files:
+        path = cache_dest(source, tag, item["name"])
+        if path.exists():
+            kept.add(path.name)
+    folder = CACHE / cache_key(source)
+    if not kept or not folder.exists():
+        return
+    for old in folder.glob("*.apk"):
+        if old.name not in kept:
+            old.unlink()
+            log(f"{label} 删除旧包 {old.name}")
+
+
+def once(force=False):
     cfg = current_config()
     state = load_json(STATE, {"apps": {}, "checked_at": ""})
     token = os.environ.get("GITHUB_TOKEN", "").strip()
@@ -444,10 +553,10 @@ def once():
         device["android"] = profile["release"]
         device["seen_at"] = datetime.now().isoformat(timespec="seconds")
         log(f"{name} {profile['model']} Android {profile['release']} {profile['abi']}")
-    save_json(CONFIG, cfg)
+    save_config(cfg)
     checked = state.get("checked_at") or ""
     due = True
-    if checked:
+    if checked and not force:
         try:
             age = datetime.now() - datetime.fromisoformat(checked)
             due = age.total_seconds() >= max(1, int(cfg.get("pull_hours") or 24)) * 3600
@@ -455,11 +564,41 @@ def once():
             due = True
     if not due:
         log("还没到查版本的时间，只安装已经下好的包")
+    family = next((item["family"] for item in profiles.values() if item.get("family")), "arm")
 
     for app in apps:
         source = source_of(app)
         label = app.get("name") or source
         min_sdk = int(app.get("min_sdk") or 0)
+        chosen = {}
+        files = []
+        if source.startswith("file:"):
+            chosen = {"key": source, "tag": "", "name": source.split(":", 1)[-1]}
+        elif due:
+            try:
+                chosen = resolve_release(source, family, token)
+            except urllib.error.HTTPError as exc:
+                log(f"{label} 查版本失败 HTTP {exc.code}")
+                continue
+            except Exception as exc:
+                lines.append(f"{label} 查版本失败 {exc}")
+                log(lines[-1])
+                continue
+            if chosen.get("error"):
+                lines.append(chosen["error"])
+                log(lines[-1])
+                continue
+            files = chosen.get("assets") or [{"name": chosen["name"], "url": chosen["url"], "size": chosen["size"]}]
+            for item in files:
+                path = cache_dest(source, chosen["tag"], item["name"])
+                if not path.exists() or (item["size"] and path.stat().st_size != item["size"]):
+                    log(f"下载 {label} {item['name']}")
+                    try:
+                        download(item["url"], path, token)
+                    except Exception as exc:
+                        log(f"{label} 下载失败 {exc}")
+                        continue
+            prune_old_apks(source, files, chosen["tag"], label)
         for device in devices:
             address = device_address(device)
             profile = profiles.get(address)
@@ -470,52 +609,32 @@ def once():
                 lines.append(f"{name} Android {profile['release']} 低于 {label} 要求的 SDK {min_sdk}，跳过")
                 log(lines[-1])
                 continue
-            key = ""
-            chosen = {}
-            dest = None
-            if due:
-                try:
-                    chosen = resolve_release(source, profile["family"], token)
-                except urllib.error.HTTPError as exc:
-                    lines.append(f"{label} 查版本失败 HTTP {exc.code}")
-                    log(lines[-1])
-                    continue
-                except Exception as exc:
-                    lines.append(f"{label} 查版本失败 {exc}")
-                    log(lines[-1])
-                    continue
-                if chosen.get("error"):
-                    lines.append(f"{name} {chosen['error']}")
-                    log(lines[-1])
-                    continue
-                key = f"{address}|{chosen['key']}"
-                files = chosen.get("assets") or [{"name": chosen["name"], "url": chosen["url"], "size": chosen["size"]}]
-                for item in files:
-                    path = cache_dest(source, chosen["tag"], item["name"])
-                    if not path.exists() or (item["size"] and path.stat().st_size != item["size"]):
-                        log(f"下载 {item['name']}")
-                        download(item["url"], path, token)
-                    if dest is None:
-                        dest = path
-            else:
-                dest = next(iter(sorted((CACHE / cache_key(source)).glob("*.apk"))), None)
-                if dest is None:
-                    continue
-            key = key or f"{address}|{source}"
+            key = f"{address}|{chosen['key']}" if chosen.get("key") else f"{address}|{source}"
+            folder = CACHE if source.startswith("file:") else CACHE / cache_key(source)
+            cached = [item for item in folder.glob("*.apk") if item.is_file()] if folder.exists() else []
+            if source.startswith("file:"):
+                wanted = source.split(":", 1)[-1]
+                cached = [item for item in cached if item.name == wanted]
+            if chosen.get("tag"):
+                cached = [item for item in cached if item.name.startswith(chosen["tag"] + "-")] or cached
+            picked = asset_for_device([{"name": item.name, "path": item} for item in cached], profile["family"])
+            dest = picked["path"] if picked else None
+            if dest is None or not dest.exists():
+                continue
             prev = state["apps"].get(key, {})
             ident = apk_identity(dest)
             if ident["package"]:
                 app["package"] = ident["package"]
                 app["apk_version"] = ident["version"]
                 app["apk_label"] = ident["label"]
-                save_json(CONFIG, cfg)
+                save_config(cfg)
             if chosen.get("tag") and prev.get("tag") == chosen["tag"]:
                 log(f"{name} {label} 已是 {chosen['tag']}，跳过")
                 continue
             installed = installed_version(address, ident["package"]) if ident["package"] else ""
             if installed and ident["version"] and installed == ident["version"]:
                 if chosen.get("tag"):
-                    state["apps"][key] = {"tag": chosen["tag"], "asset": chosen["name"], "version": ident["version"], "at": datetime.now().isoformat(timespec="seconds")}
+                    state["apps"][key] = {"tag": chosen["tag"], "asset": dest.name, "version": ident["version"], "at": datetime.now().isoformat(timespec="seconds")}
                     changed = True
                     save_json(STATE, state)
                 log(f"{name} {label} 电视上已是 {installed}，跳过")
@@ -525,7 +644,7 @@ def once():
             if code == 0 and "Success" in out:
                 state["apps"][key] = {
                     "tag": shown,
-                    "asset": chosen.get("name") or dest.name,
+                    "asset": dest.name,
                     "at": datetime.now().isoformat(timespec="seconds"),
                 }
                 changed = True
@@ -568,12 +687,18 @@ class Handler(BaseHTTPRequestHandler):
             self.send(200, PAGE_FILE.read_text(encoding="utf-8"), "text/html; charset=utf-8")
         elif self.path == "/api/config":
             self.send(200, json.dumps(current_config(), ensure_ascii=False))
+        elif self.path == "/api/config.yaml":
+            self.send(200, CONFIG.read_text(encoding="utf-8") if CONFIG.exists() else dump_yaml(DEFAULT), "application/yaml; charset=utf-8")
         elif self.path.startswith("/api/packages"):
             from urllib.parse import urlparse, parse_qs
             query = parse_qs(urlparse(self.path).query)
             address = (query.get("address") or [""])[0]
             if not known_address(address):
                 self.send(400, "[]")
+                return
+            ok, _detail = connect(address)
+            if not ok:
+                self.send(200, json.dumps({"offline": True, "rows": []}, ensure_ascii=False))
                 return
             kind = (query.get("kind") or ["user"])[0]
             flag = "-3" if kind == "user" else "-s"
@@ -594,6 +719,10 @@ class Handler(BaseHTTPRequestHandler):
             address = (query.get("address") or [""])[0]
             if not known_address(address):
                 self.send(400, "[]")
+                return
+            ok, _detail = connect(address)
+            if not ok:
+                self.send(200, json.dumps({"offline": True, "rows": []}, ensure_ascii=False))
                 return
             code, out = adb("-s", address, "shell", "ps", "-A", "-o", "USER,PID,RSS,NAME", timeout=20)
             rows=[]
@@ -620,7 +749,8 @@ class Handler(BaseHTTPRequestHandler):
                 rows.append(row)
             self.send(200, json.dumps(rows, ensure_ascii=False))
         elif self.path == "/api/log":
-            text = LOG.read_text(encoding="utf-8")[-8000:] if LOG.exists() else "还没有记录"
+            lines = LOG.read_text(encoding="utf-8").splitlines() if LOG.exists() else []
+            text = "\n".join(reversed(lines[-50:])) if lines else "还没有日志"
             self.send(200, text, "text/plain; charset=utf-8")
         elif self.path.startswith("/api/cache"):
             from urllib.parse import urlparse, parse_qs, unquote
@@ -640,6 +770,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            if self.path == "/api/upload":
+                added, error = save_uploads(self)
+                self.send(200, json.dumps({"added": added, "error": error}, ensure_ascii=False))
+                return
             if self.path == "/api/config":
                 incoming = self.read_json()
                 incoming.pop("github_token", None)
@@ -647,8 +781,8 @@ class Handler(BaseHTTPRequestHandler):
                     device["port"] = int(device.get("port") or 5555)
                     device["address"] = device_address(device)
                 incoming["pull_hours"] = max(1, int(incoming.get("pull_hours") or 24))
-                incoming["install_minutes"] = max(1, int(incoming.get("install_minutes") or 5))
-                save_json(CONFIG, incoming)
+                incoming["install_minutes"] = max(1, int(incoming.get("install_minutes") or 10))
+                save_config(incoming)
                 self.send(200, "{\"ok\":true}")
             elif self.path == "/api/notify-test":
                 sent = send_notice(current_config(), "电视装包测试", "通知通道可用")
@@ -729,18 +863,67 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(400, "不支持这个操作", "text/plain; charset=utf-8")
             elif self.path == "/api/pull":
                 with LOCK:
-                    once()
-                self.send(200, "已检查一轮，结果在最近记录里", "text/plain; charset=utf-8")
+                    once(force=True)
+                self.send(200, "已检查一轮，结果在最近日志里", "text/plain; charset=utf-8")
             else:
                 self.send(404, "{}")
         except Exception as exc:
             self.send(400, str(exc), "text/plain; charset=utf-8")
 
 
+def save_uploads(handler):
+    import email
+    from email.policy import default
+    added = []
+    length = int(handler.headers.get("Content-Length") or 0)
+    content_type = handler.headers.get("Content-Type") or ""
+    raw = handler.rfile.read(length)
+    if "multipart/form-data" not in content_type:
+        return [], "不是上传文件"
+    message = email.message_from_bytes(b"Content-Type: " + content_type.encode("utf-8") + b"\r\nMIME-Version: 1.0\r\n\r\n" + raw, policy=default)
+    CACHE.mkdir(parents=True, exist_ok=True)
+    for part in message.walk():
+        if part.get_content_maintype() == "multipart":
+            continue
+        name = Path(part.get_filename() or "").name
+        if not name.lower().endswith(".apk"):
+            continue
+        dest = CACHE / name
+        payload = part.get_payload(decode=True)
+        if not isinstance(payload, (bytes, bytearray)):
+            continue
+        dest.write_bytes(payload)
+        try:
+            ident = apk_identity(dest)
+        except Exception:
+            ident = {"package": "", "version": "", "label": ""}
+        added.append({"name": ident["label"] or name[:-4], "source": f"file:{name}", "package": ident["package"]})
+    if not added:
+        return [], "没有 APK"
+    return added, ""
+
+
+def migrate_cache_dirs(cfg):
+    for app in cfg.get("apps") or []:
+        source = source_of(app)
+        if not source or github_repo(source):
+            continue
+        old_name = re.sub(r"[^A-Za-z0-9._-]+", "_", source.strip().split("?", 1)[0].rstrip("/").split("/")[-1])[:80]
+        new_dir = CACHE / cache_key(source)
+        old_dir = CACHE / old_name
+        if old_name and old_dir != new_dir and old_dir.is_dir() and not new_dir.exists():
+            old_dir.rename(new_dir)
+            log(f"{app.get('name') or source} 缓存目录改为 {new_dir.name}")
+
+
 def main():
     DATA.mkdir(parents=True, exist_ok=True)
-    if not CONFIG.exists():
-        save_json(CONFIG, DEFAULT)
+    legacy = DATA / "config.json"
+    if not CONFIG.exists() and legacy.exists():
+        save_config(load_json(legacy, DEFAULT))
+    elif not CONFIG.exists():
+        save_config(DEFAULT)
+    migrate_cache_dirs(current_config())
     server = ThreadingHTTPServer(("0.0.0.0", 8080), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     log("网页已开在 8080")
@@ -752,7 +935,7 @@ def main():
         except Exception as exc:
             log(f"本轮失败 {exc}")
             notice(current_config(), "电视装包本轮失败", str(exc))
-        wait = max(1, int(cfg.get("install_minutes") or 5)) * 60
+        wait = max(1, int(cfg.get("install_minutes") or 10)) * 60
         time.sleep(wait)
 
 
