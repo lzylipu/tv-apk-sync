@@ -121,7 +121,7 @@ GitHub 发布页直链会按文件名骨架跟踪新版本。不是 GitHub 发�
 ## 🧪 测试 / Testing
 
 ```bash
-python3 -m unittest discover -s tests -v
+python3 -m unittest tests.abi_select tests.config_cache -v
 ```
 
 ## 📁 项目结构 / Project Structure
@@ -134,6 +134,8 @@ tv-apk-sync/
 ├── docker-compose.yml
 ├── config.example.yaml
 ├── tests/
+│   ├── abi_select.py
+│   └── config_cache.py
 └── .github/workflows/docker-publish.yml
 ```
 
