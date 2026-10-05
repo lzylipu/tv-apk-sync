@@ -738,11 +738,11 @@ def once(force=False):
             for item in files:
                 path = cache_dest(source, chosen["tag"], item["name"])
                 if not path.exists() or (item["size"] and path.stat().st_size != item["size"]):
-                    log(f"下载 {label} {item['name']}")
-                    downloaded = True
-                    dl_count += 1
                     try:
                         download(item["url"], path, token)
+                        downloaded = True
+                        dl_count += 1
+                        log(f"下载 {label} {item['name']}")
                     except Exception as exc:
                         log(f"{label} 下载失败 {exc}")
                         continue
@@ -757,7 +757,6 @@ def once(force=False):
     for app in apps:
         source = source_of(app)
         label = app.get("name") or source
-        # 查找该 source 的本地缓存包：不依赖目录名，直接在全缓存里匹配 source 关键字。
         # 查找该 source 的本地缓存包：不依赖目录名，直接在全缓存里匹配 source 关键字。
         cached = []
         if CACHE.exists():
@@ -852,7 +851,7 @@ def once(force=False):
                 continue
             key = f"{address}|{chosen['key']}" if chosen.get("key") else f"{address}|{source}"
             wanted = source.split(":", 1)[-1] if source.startswith("file:") else None
-            pool = [item for item in item["cached"] if (not wanted or item.name == wanted)]
+            pool = [fl for fl in item["cached"] if (not wanted or fl.name == wanted)]
             picked = asset_for_device([{"name": x.name, "path": x} for x in pool], profile["family"])
             dest = picked["path"] if picked else None
             if dest is None or not dest.exists():
