@@ -626,6 +626,8 @@ def once(force=False):
     state = load_json(STATE, {"apps": {}, "checked_at": ""})
     token = os.environ.get("GITHUB_TOKEN", "").strip()
     lines = []
+    notify_ok = {}
+    notify_fail = {}
     changed = False
     devices = [item for item in (cfg.get("devices") or []) if device_address(item).split(":")[0]]
     apps = [item for item in (cfg.get("apps") or []) if source_of(item)]
@@ -768,19 +770,25 @@ def once(force=False):
                     "at": now.isoformat(timespec="seconds"),
                 }
                 changed = True
+                notify_ok.setdefault(name, []).append(f"{label} → {shown}")
                 lines.append(f"{name} {label} 已装 {shown}")
             else:
+                notify_fail.setdefault(name, []).append(f"{label} → {install_reason(out)}")
                 lines.append(f"{name} {label} 安装失败：{install_reason(out)}")
             log(lines[-1])
     if offline:
         state["offline"] = offline
     if changed or offline:
         save_json(STATE, state)
-    failures = [line for line in lines if "失败" in line or "没有适合" in line]
-    if failures:
-        notice(cfg, "安装没有完成", "\n".join(failures))
-    elif lines:
-        notice(cfg, "安装包已更新", "\n".join(lines))
+    # 通知：按设备分组，成功列"哪台设备更新了哪些软件"，失败列"哪台哪些失败+原因"
+    ok_text = "\n".join(f"{d}：{'、'.join(items)}" for d, items in notify_ok.items())
+    fail_text = "\n".join(f"{d}：{'、'.join(items)}" for d, items in notify_fail.items())
+    if ok_text and fail_text:
+        notice(cfg, "部分更新完成", f"成功：\n{ok_text}\n\n失败：\n{fail_text}")
+    elif fail_text:
+        notice(cfg, "更新失败", fail_text)
+    elif ok_text:
+        notice(cfg, "更新完成", ok_text)
     else:
         log("没有需要安装的更新")
 
