@@ -633,21 +633,6 @@ def once(force=False):
         log("还没有设备和软件")
         return
 
-    profiles = {}
-    for device in devices:
-        address = device_address(device)
-        name = device.get("name", address)
-        profile, err = device_profile(address)
-        if err:
-            log(f"{name} 不在线，跳过")
-            continue
-        profiles[address] = profile
-        device["model"] = profile["model"]
-        device["abi"] = profile["abi"]
-        device["android"] = profile["release"]
-        device["seen_at"] = datetime.now().isoformat(timespec="seconds")
-        log(f"{name} {profile['model']} Android {profile['release']} {profile['abi']}")
-    save_config(cfg)
     checked = state.get("checked_at") or ""
     due = True
     if checked and not force:
@@ -658,19 +643,21 @@ def once(force=False):
             due = True
     if not due:
         log("还没到查版本的时间，只安装已经下好的包")
-    family = next((item["family"] for item in profiles.values() if item.get("family")), "arm")
 
-    for app in apps:
-        source = source_of(app)
-        label = app.get("name") or source
-        min_sdk = int(app.get("min_sdk") or 0)
-        chosen = {}
-        files = []
-        if source.startswith("file:"):
-            chosen = {"key": source, "tag": "", "name": source.split(":", 1)[-1]}
-        elif due:
+    # 离线冷却：连不上的设备记失败时间，冷却窗口内跳过，不再每轮白等超时
+    offline = state.get("offline") or {}
+    cooldown_s = max(1, int(cfg.get("install_minutes") or 10)) * 60
+
+    # 第一轮：只在到时间时查版本、下载新包。这轮不碰设备。
+    chosen_map = {}
+    if due:
+        for app in apps:
+            source = source_of(app)
+            label = app.get("name") or source
+            if source.startswith("file:"):
+                continue
             try:
-                chosen = resolve_release(source, family, token)
+                chosen = resolve_release(source, "", token)
             except urllib.error.HTTPError as exc:
                 log(f"{label} 查版本失败 HTTP {exc.code}")
                 continue
@@ -682,6 +669,7 @@ def once(force=False):
                 lines.append(chosen["error"])
                 log(lines[-1])
                 continue
+            chosen_map[source] = chosen
             files = chosen.get("assets") or [{"name": chosen["name"], "url": chosen["url"], "size": chosen["size"]}]
             for item in files:
                 path = cache_dest(source, chosen["tag"], item["name"])
@@ -693,25 +681,63 @@ def once(force=False):
                         log(f"{label} 下载失败 {exc}")
                         continue
             prune_old_apks(source, files, chosen["tag"], label)
+        state["checked_at"] = datetime.now().isoformat(timespec="seconds")
+        save_json(STATE, state)
+
+    # 第二轮：有没有缓存包决定要不要碰设备。没包就整轮不连 ADB。
+    now = datetime.now()
+    profiles = {}
+    for app in apps:
+        source = source_of(app)
+        label = app.get("name") or source
+        folder = CACHE if source.startswith("file:") else CACHE / cache_key(source)
+        cached = [item for item in folder.glob("*.apk") if item.is_file()] if folder.exists() else []
+        if not cached:
+            log(f"{label} 没有可装的包，跳过")
+            continue
+        # 有包了，才扫描设备（带冷却）
         for device in devices:
             address = device_address(device)
-            profile = profiles.get(address)
             name = device.get("name", address)
+            if address not in profiles:
+                last_fail = offline.get(address)
+                if last_fail:
+                    try:
+                        if (now - datetime.fromisoformat(last_fail)).total_seconds() < cooldown_s:
+                            log(f"{name} 上次连不上，冷却中，跳过")
+                            continue
+                    except ValueError:
+                        pass
+                profile, err = device_profile(address)
+                if err:
+                    offline[address] = now.isoformat(timespec="seconds")
+                    log(f"{name} 不在线，跳过")
+                    continue
+                offline.pop(address, None)
+                profiles[address] = profile
+                device["model"] = profile["model"]
+                device["abi"] = profile["abi"]
+                device["android"] = profile["release"]
+                device["seen_at"] = now.isoformat(timespec="seconds")
+                log(f"{name} {profile['model']} Android {profile['release']} {profile['abi']}")
+            profile = profiles.get(address)
             if not profile:
                 continue
+            min_sdk = int(app.get("min_sdk") or 0)
             if min_sdk and profile["sdk"] and profile["sdk"] < min_sdk:
                 lines.append(f"{name} Android {profile['release']} 低于 {label} 要求的 SDK {min_sdk}，跳过")
                 log(lines[-1])
                 continue
-            key = f"{address}|{chosen['key']}" if chosen.get("key") else f"{address}|{source}"
-            folder = CACHE if source.startswith("file:") else CACHE / cache_key(source)
-            cached = [item for item in folder.glob("*.apk") if item.is_file()] if folder.exists() else []
+            chosen = {}
             if source.startswith("file:"):
-                wanted = source.split(":", 1)[-1]
-                cached = [item for item in cached if item.name == wanted]
-            if chosen.get("tag"):
-                cached = [item for item in cached if item.name.startswith(chosen["tag"] + "-")] or cached
-            picked = asset_for_device([{"name": item.name, "path": item} for item in cached], profile["family"])
+                chosen = {"key": source, "tag": "", "name": source.split(":", 1)[-1]}
+            else:
+                # 用第一轮的查版本结果（含 release tag）；非查版本轮可能没有，退化到只看源
+                chosen = chosen_map.get(source) or {"key": source, "tag": ""}
+            key = f"{address}|{chosen['key']}" if chosen.get("key") else f"{address}|{source}"
+            wanted = source.split(":", 1)[-1] if source.startswith("file:") else None
+            pool = [item for item in cached if (not wanted or item.name == wanted)]
+            picked = asset_for_device([{"name": item.name, "path": item} for item in pool], profile["family"])
             dest = picked["path"] if picked else None
             if dest is None or not dest.exists():
                 continue
@@ -722,31 +748,33 @@ def once(force=False):
                 app["apk_version"] = ident["version"]
                 app["apk_label"] = ident["label"]
                 save_config(cfg)
-            if chosen.get("tag") and prev.get("tag") == chosen["tag"]:
-                log(f"{name} {label} 已是 {chosen['tag']}，跳过")
+            if prev.get("asset") == dest.name and (not chosen.get("tag") or prev.get("tag") == chosen.get("tag")):
+                log(f"{name} {label} 已是 {prev.get('tag') or dest.name}，跳过")
                 continue
             installed = installed_version(address, ident["package"]) if ident["package"] else ""
             if installed and ident["version"] and installed == ident["version"]:
-                if chosen.get("tag"):
-                    state["apps"][key] = {"tag": chosen["tag"], "asset": dest.name, "version": ident["version"], "at": datetime.now().isoformat(timespec="seconds")}
-                    changed = True
-                    save_json(STATE, state)
+                state["apps"][key] = {"asset": dest.name, "tag": chosen.get("tag"), "version": ident["version"], "at": now.isoformat(timespec="seconds")}
+                changed = True
+                save_json(STATE, state)
                 log(f"{name} {label} 电视上已是 {installed}，跳过")
                 continue
             code, out = adb("-s", address, "install", "-r", str(dest), timeout=300)
             shown = chosen.get("tag") or dest.name
             if code == 0 and "Success" in out:
                 state["apps"][key] = {
-                    "tag": shown,
+                    "tag": chosen.get("tag"),
                     "asset": dest.name,
-                    "at": datetime.now().isoformat(timespec="seconds"),
+                    "version": ident["version"],
+                    "at": now.isoformat(timespec="seconds"),
                 }
                 changed = True
                 lines.append(f"{name} {label} 已装 {shown}")
             else:
                 lines.append(f"{name} {label} 安装失败：{install_reason(out)}")
             log(lines[-1])
-    if changed:
+    if offline:
+        state["offline"] = offline
+    if changed or offline:
         save_json(STATE, state)
     failures = [line for line in lines if "失败" in line or "没有适合" in line]
     if failures:
@@ -755,9 +783,6 @@ def once(force=False):
         notice(cfg, "安装包已更新", "\n".join(lines))
     else:
         log("没有需要安装的更新")
-    if due:
-        state["checked_at"] = datetime.now().isoformat(timespec="seconds")
-        save_json(STATE, state)
 
 
 class Handler(BaseHTTPRequestHandler):
