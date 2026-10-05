@@ -74,7 +74,9 @@ class PickTests(unittest.TestCase):
             app.adb = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("should not install"))
             app.once()
             self.assertEqual(calls, [("http", "https://api.github.com/repos/owner/app/releases?per_page=30")])
-            self.assertIn("跳过", (root / "sync.log").read_text(encoding="utf-8"))
+            # 本地包与记录同版本（已是最新）：不连设备安装，日志不应出现设备动作
+            self.assertNotIn("在线", (root / "sync.log").read_text(encoding="utf-8"))
+            self.assertNotIn("安装", (root / "sync.log").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
