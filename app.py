@@ -200,6 +200,20 @@ def sdk_int(value):
     return int(match.group()) if match else 0
 
 
+def version_ge(a, b):
+    """a >= b 按数字分段比较版本号；非纯数字时退化为字符串相等比较。"""
+    if not a or not b:
+        return a == b
+    pa = [int(x) for x in re.findall(r"\d+", a)][:4]
+    pb = [int(x) for x in re.findall(r"\d+", b)][:4]
+    if not pa or not pb:
+        return a == b
+    for x, y in zip(pa, pb):
+        if x != y:
+            return x > y
+    return len(pa) >= len(pb)
+
+
 def asset_score(name, family):
     low = name.lower()
     if not low.endswith(".apk"):
@@ -506,6 +520,8 @@ def asset_payload(item):
 def release_groups(releases):
     groups = []
     for release in releases:
+        if release.get("prerelease"):
+            continue
         assets = [item for item in (release.get("assets") or []) if str(item.get("name", "")).lower().endswith(".apk")]
         buckets = {}
         for item in assets:
@@ -686,9 +702,36 @@ def once(force=False):
         state["checked_at"] = datetime.now().isoformat(timespec="seconds")
         save_json(STATE, state)
 
-    # 第二轮：有没有缓存包决定要不要碰设备。没包就整轮不连 ADB。
+    # 第二轮：先扫一遍设备在线状态（带冷却），再做安装。设备记录不做 gate，没下载包也要检测/记录。
     now = datetime.now()
     profiles = {}
+    for device in devices:
+        address = device_address(device)
+        name = device.get("name", address)
+        if address in profiles:
+            continue
+        last_fail = offline.get(address)
+        if last_fail:
+            try:
+                if (now - datetime.fromisoformat(last_fail)).total_seconds() < cooldown_s:
+                    log(f"{name} 上次连不上，冷却中，跳过")
+                    continue
+            except ValueError:
+                pass
+        profile, err = device_profile(address)
+        if err:
+            offline[address] = now.isoformat(timespec="seconds")
+            log(f"{name} 不在线，跳过")
+            continue
+        offline.pop(address, None)
+        profiles[address] = profile
+        device["model"] = profile["model"]
+        device["abi"] = profile["abi"]
+        device["android"] = profile["release"]
+        device["seen_at"] = now.isoformat(timespec="seconds")
+        log(f"{name} {profile['model']} Android {profile['release']} {profile['abi']}")
+
+    # 按应用做安装：有本地包且与设备已装版本不一致才装
     for app in apps:
         source = source_of(app)
         label = app.get("name") or source
@@ -697,31 +740,9 @@ def once(force=False):
         if not cached:
             log(f"{label} 没有可装的包，跳过")
             continue
-        # 有包了，才扫描设备（带冷却）
         for device in devices:
             address = device_address(device)
             name = device.get("name", address)
-            if address not in profiles:
-                last_fail = offline.get(address)
-                if last_fail:
-                    try:
-                        if (now - datetime.fromisoformat(last_fail)).total_seconds() < cooldown_s:
-                            log(f"{name} 上次连不上，冷却中，跳过")
-                            continue
-                    except ValueError:
-                        pass
-                profile, err = device_profile(address)
-                if err:
-                    offline[address] = now.isoformat(timespec="seconds")
-                    log(f"{name} 不在线，跳过")
-                    continue
-                offline.pop(address, None)
-                profiles[address] = profile
-                device["model"] = profile["model"]
-                device["abi"] = profile["abi"]
-                device["android"] = profile["release"]
-                device["seen_at"] = now.isoformat(timespec="seconds")
-                log(f"{name} {profile['model']} Android {profile['release']} {profile['abi']}")
             profile = profiles.get(address)
             if not profile:
                 continue
@@ -743,21 +764,23 @@ def once(force=False):
             dest = picked["path"] if picked else None
             if dest is None or not dest.exists():
                 continue
-            prev = state["apps"].get(key, {})
             ident = apk_identity(dest)
             if ident["package"]:
                 app["package"] = ident["package"]
                 app["apk_version"] = ident["version"]
                 app["apk_label"] = ident["label"]
                 save_config(cfg)
+            installed = installed_version(address, ident["package"]) if ident["package"] else ""
+            # 设备已装版本记录到 state（无论本地是否有包）
+            if installed:
+                state["apps"].setdefault(key, {}).update({"installed": installed, "seen_at": now.isoformat(timespec="seconds")})
+            prev = state["apps"].get(key, {})
             if prev.get("asset") == dest.name and (not chosen.get("tag") or prev.get("tag") == chosen.get("tag")):
                 log(f"{name} {label} 已是 {prev.get('tag') or dest.name}，跳过")
                 continue
-            installed = installed_version(address, ident["package"]) if ident["package"] else ""
-            if installed and ident["version"] and installed == ident["version"]:
-                state["apps"][key] = {"asset": dest.name, "tag": chosen.get("tag"), "version": ident["version"], "at": now.isoformat(timespec="seconds")}
+            if installed and ident["version"] and version_ge(installed, ident["version"]):
+                state["apps"][key] = {"asset": dest.name, "tag": chosen.get("tag"), "version": ident["version"], "installed": installed, "at": now.isoformat(timespec="seconds")}
                 changed = True
-                save_json(STATE, state)
                 log(f"{name} {label} 电视上已是 {installed}，跳过")
                 continue
             code, out = adb("-s", address, "install", "-r", str(dest), timeout=300)
@@ -767,6 +790,7 @@ def once(force=False):
                     "tag": chosen.get("tag"),
                     "asset": dest.name,
                     "version": ident["version"],
+                    "installed": ident["version"],
                     "at": now.isoformat(timespec="seconds"),
                 }
                 changed = True
@@ -791,8 +815,6 @@ def once(force=False):
         notice(cfg, "更新完成", ok_text)
     else:
         log("没有需要安装的更新")
-
-
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         return
