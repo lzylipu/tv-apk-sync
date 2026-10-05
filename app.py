@@ -714,6 +714,7 @@ def once(force=False):
         except ValueError:
             due = True
     chosen_map = {}
+    dl_count = 0
     if due:
         for app in apps:
             source = source_of(app)
@@ -739,6 +740,7 @@ def once(force=False):
                 if not path.exists() or (item["size"] and path.stat().st_size != item["size"]):
                     log(f"下载 {label} {item['name']}")
                     downloaded = True
+                    dl_count += 1
                     try:
                         download(item["url"], path, token)
                     except Exception as exc:
@@ -809,7 +811,9 @@ def once(force=False):
 
     # 没软件需要动设备，本轮结束，不写噪音日志。
     if not need_install:
-        return
+        if dl_count:
+            return f"已下载 {dl_count} 个新包，设备无需安装"
+        return "本轮没有需要更新的软件"
 
     # 第④步：只对需要安装的软件，连接设备对比实装版本。
     profiles = {}
@@ -897,10 +901,14 @@ def once(force=False):
     fail_text = "\n".join(f"{d}：{'、'.join(items)}" for d, items in notify_fail.items())
     if ok_text and fail_text:
         notice(cfg, "部分更新完成", f"成功：\n{ok_text}\n\n失败：\n{fail_text}")
+        return f"部分更新完成\n成功：\n{ok_text}\n\n失败：\n{fail_text}"
     elif fail_text:
         notice(cfg, "更新失败", fail_text)
+        return f"更新失败\n{fail_text}"
     elif ok_text:
         notice(cfg, "更新完成", ok_text)
+        return f"更新完成\n{ok_text}"
+    return "本轮没有需要更新的软件"
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         return
@@ -1102,8 +1110,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(400, "不支持这个操作", "text/plain; charset=utf-8")
             elif self.path == "/api/pull":
                 with LOCK:
-                    once(force=True)
-                self.send(200, "已检查一轮，结果在最近日志里", "text/plain; charset=utf-8")
+                    result = once(force=True)
+                self.send(200, result or "已检查一轮", "text/plain; charset=utf-8")
             else:
                 self.send(404, "{}")
         except Exception as exc:
