@@ -140,28 +140,63 @@ def save_json(path, data):
 
 
 def http_json(url, token=""):
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/vnd.github+json"})
-    if token:
-        req.add_header("Authorization", f"Bearer {token}")
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    # 第三方 GitHub 加速代理前缀（免 token，突破 api.github.com 未认证 60 次/小时限流）
+    proxies = [
+        "https://gh-proxy.com/",
+        "https://ghproxy.net/",
+        "https://mirror.ghproxy.com/",
+        "https://ghfast.top/",
+    ]
+    attempts = [url]
+    if "api.github.com" in url:
+        attempts += [p + url for p in proxies]
+    last = None
+    for target in attempts:
+        try:
+            req = urllib.request.Request(target, headers={"User-Agent": UA, "Accept": "application/vnd.github+json"})
+            if token:
+                req.add_header("Authorization", f"Bearer {token}")
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:
+            last = exc
+            continue
+    raise last if last else RuntimeError("全部代理都失败")
 
 
 def download(url, dest, token=""):
     dest.parent.mkdir(parents=True, exist_ok=True)
     parts = urllib.parse.urlsplit(url)
     url = urllib.parse.urlunsplit(parts._replace(path=urllib.parse.quote(urllib.parse.unquote(parts.path), safe="/%")))
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/octet-stream"})
-    if token and "github" in url:
-        req.add_header("Authorization", f"Bearer {token}")
-    tmp = dest.with_name(dest.name + ".part")
-    try:
-        with urllib.request.urlopen(req, timeout=180) as resp, tmp.open("wb") as handle:
-            shutil.copyfileobj(resp, handle)
-        tmp.replace(dest)
-    except Exception:
-        tmp.unlink(missing_ok=True)
-        raise
+    # 第三方 GitHub 加速代理前缀（免 token，下载 GitHub release/raw 失败时自动走代理）
+    proxies = [
+        "https://gh-proxy.com/",
+        "https://ghproxy.net/",
+        "https://mirror.ghproxy.com/",
+        "https://ghfast.top/",
+    ]
+    attempts = [url]
+    if "github.com" in url or "githubusercontent.com" in url:
+        attempts += [p + url for p in proxies]
+    last = None
+    for target in attempts:
+        try:
+            req = urllib.request.Request(target, headers={"User-Agent": UA, "Accept": "application/octet-stream"})
+            if token and ("github.com" in target or "githubusercontent.com" in target):
+                req.add_header("Authorization", f"Bearer {token}")
+            tmp = dest.with_name(dest.name + ".part")
+            try:
+                with urllib.request.urlopen(req, timeout=180) as resp, tmp.open("wb") as handle:
+                    shutil.copyfileobj(resp, handle)
+                tmp.replace(dest)
+                return
+            except Exception:
+                tmp.unlink(missing_ok=True)
+                raise
+        except Exception as exc:
+            last = exc
+            continue
+    raise last if last else RuntimeError("全部代理都失败")
 
 
 def adb(*args, timeout=60):
