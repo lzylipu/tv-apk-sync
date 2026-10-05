@@ -50,8 +50,9 @@ Version checks use the interval set on the notify page. A package already downlo
 ## ⚙️ Configuration
 
 | Field | Meaning |
-|---|---|
+||---|---|
 | `apps[].source` | `owner/repo`, a GitHub URL, or a direct `.apk` URL |
+| `apps[].min_sdk` | Optional. Skip devices with an Android version below this (e.g. 21 = Android 5.0) |
 | `pull_hours` | How often to look for a new version. Default 24 |
 | `install_minutes` | Device check interval from the notify page. Status refresh and installs both use it |
 | `GITHUB_TOKEN` | Private repositories only. Set it in the environment |

@@ -63,13 +63,16 @@ def dump_yaml(data):
             if not value:
                 lines.append("  []")
                 continue
-            fields = ("name", "ip", "port") if key == "devices" else ("name", "source")
+            fields = ("name", "ip", "port") if key == "devices" else ("name", "source", "min_sdk")
             for item in value:
                 first = True
                 for field in fields:
+                    val = item.get(field, "")
+                    if str(val) in ("", "0", "None"):
+                        continue
                     mark = "- " if first else "  "
                     first = False
-                    lines.append(f"  {mark}{field}: {yaml_quote(item.get(field, ''))}")
+                    lines.append(f"  {mark}{field}: {yaml_quote(val)}")
         elif key == "notify":
             lines.append("notify:")
             notify = value or {}

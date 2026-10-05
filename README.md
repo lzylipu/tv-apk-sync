@@ -24,6 +24,9 @@ The left side is navigation. Devices, sources, and notices are saved first. Cach
 - 📦 填 GitHub 仓库，或一条 APK 直链。不用先填包名
 - 🔁 GitHub 直链会记住文件名骨架。`1.8.1` 后面变成 `1.8.2`、`1.9.1`，仍认同一条发布线
 - 🧠 下载后用 `aapt` 读安卓包名和版本，再和电视上的版本比
+- 🌐 GitHub 查版本/下载内置 gh-proxy 等免费代理自动回退，公开仓库免 token，不再被 403 限流卡住
+- 🎯 `apps[].min_sdk` 可选：低于指定安卓版本的设备自动跳过，不装
+- 💬 点「现在拉一次包」直接返回本轮结果：下了几个包、有没有更新、有没有装成功/失败，不再没反应
 - ⏰ 查版本默认 24 小时一次。设备开着时，短间隔只负责安装已经下好的包
 - 🔔 飞书、PushPlus、Bark 三个填一个。没填就只写页面里的日志
 - 📤 通知页可以导出、导入设备和软件、通知、两个间隔。文件就是 `config.yaml`。导入后还要点保存
@@ -111,6 +114,7 @@ compose 里已经写了同样的端口 `8088:8080` 和目录 `./data:/data`。�
 | `devices[].ip` / `port` | 电视地址，端口默认 5555 |
 | `apps[].name` | 页面上显示的名称 |
 | `apps[].source` | `用户名/仓库`、仓库网址，或以 `.apk` 结尾的直链 |
+| `apps[].min_sdk` | 可选。低于这个安卓版本的设备不装（安卓版本号，如 21 = Android 5.0） |
 | `notify.feishu` | 飞书机器人 webhook |
 | `notify.pushplus` | PushPlus token |
 | `notify.bark` | Bark 地址，形如 `https://api.day.app/你的key` |
@@ -148,7 +152,9 @@ tv-apk-sync/
 | 设备不在线 | 电视没开，或 5555 没开。IP 变了就在路由器里做绑定 |
 | 签名不一致 | 不自动卸载。要换签名，先在电视上手动卸一次 |
 | 直链没有更新 | 新文件名和原来的骨架不同，或新版本排在仓库最近 30 条发布之外 |
+| 查版本报 403 | GitHub 未认证有 60 次/小时限流。已内置 gh-proxy 等代理自动回退，公开仓库无需 token。若仍频繁，降低 `pull_hours` 或检查本机出口 IP 是否被共享超限 |
 | 私有仓库失败 | compose 里加 `GITHUB_TOKEN` |
+| 拉包没反应 | 打开网页日志看结果。全是最新版时点「现在拉一次包」会提示「本轮没有需要更新的软件」，这是正常，不是失败 |
 
 ## 🤝 贡献 / Contributing
 
