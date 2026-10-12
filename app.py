@@ -203,9 +203,12 @@ def download(url, dest, token=""):
 
 
 def adb(*args, timeout=60):
-    proc = subprocess.run(["adb", *args], capture_output=True, text=True, timeout=timeout)
-    out = (proc.stdout or "") + (proc.stderr or "")
-    return proc.returncode, out.strip()
+    try:
+        proc = subprocess.run(["adb", *args], capture_output=True, text=True, timeout=timeout)
+        out = (proc.stdout or "") + (proc.stderr or "")
+        return proc.returncode, out.strip()
+    except subprocess.TimeoutExpired:
+        return 124, f"adb timeout after {timeout}s"
 
 
 def connect(address):
