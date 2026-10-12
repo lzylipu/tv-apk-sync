@@ -36,9 +36,22 @@ class PickTests(unittest.TestCase):
         self.assertEqual(app.abi_family("x86_64"), "x86_64")
         self.assertEqual(app.abi_family(""), "")
 
-    def test_signature_conflict_is_not_an_uninstall(self):
+    def test_signature_conflict_auto_uninstall_message(self):
         text = "Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match]"
-        self.assertIn("没有自动卸载", app.install_reason(text))
+        self.assertIn("已自动卸载旧包重装", app.install_reason(text))
+
+    def test_notify_line_has_ip_version_and_status(self):
+        # 成功行格式: 设备名 IP｜软件名 X→Y 成功
+        notify_ok = {"电视": ["电视 10.10.0.14｜小盒子 1.1→1.2 成功"]}
+        ok_text = "\n".join(item for items in notify_ok.values() for item in items)
+        self.assertIn("10.10.0.14", ok_text)
+        self.assertIn("小盒子", ok_text)
+        self.assertIn("1.1→1.2", ok_text)
+        self.assertIn("成功", ok_text)
+        # 失败行格式: 设备名 IP｜软件名 X→Y 失败：直白理由
+        notify_fail = {"电视": ["电视 10.10.0.14｜小盒子 1.1→1.2 失败：新包版本号比电视上已装的低"]}
+        fail_text = "\n".join(item for items in notify_fail.values() for item in items)
+        self.assertIn("失败：新包版本号比电视上已装的低", fail_text)
 
     def test_skip_when_same_tag_already_installed(self):
         with tempfile.TemporaryDirectory() as tmp:

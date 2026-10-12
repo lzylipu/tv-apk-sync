@@ -414,7 +414,7 @@ def installed_version(address, package):
 def install_reason(out):
     text = out or ""
     if "UPDATE_INCOMPATIBLE" in text:
-        return "签名和电视上已装的不一致。要换包先在电视上卸载，这次没有自动卸载"
+        return "签名和电视上已装的不一致，已自动卸载旧包重装"
     if "VERSION_DOWNGRADE" in text:
         return "新包版本号比电视上已装的低"
     if "OLDER_SDK" in text or "NO_MATCHING_ABIS" in text:
@@ -880,6 +880,11 @@ def once(force=False):
                 log(f"{now.strftime('%H:%M')} {name} {label} 已是 {installed}，跳过")
                 continue
             code, out = adb("-s", address, "install", "-r", str(dest), timeout=300)
+            if code != 0 and "UPDATE_INCOMPATIBLE" in out:
+                # 签名和已装包不一致,直接覆盖装不上。自动卸载旧的再装新的,不丢这一步
+                log(f"{now.strftime('%H:%M')} {name} {label} 签名不一致，自动先卸载旧包再装")
+                adb("-s", address, "shell", "pm", "uninstall", "--user", "0", ident["package"], timeout=60)
+                code, out = adb("-s", address, "install", "-r", str(dest), timeout=300)
             shown = chosen.get("tag") or dest.name
             if code == 0 and "Success" in out:
                 state["apps"][key] = {
@@ -892,10 +897,14 @@ def once(force=False):
                 changed = True
                 from_v = prev.get("installed") or prev.get("version") or "无"
                 to_v = ident["version"]
-                notify_ok.setdefault(name, []).append(f"{label} {from_v}→{to_v}")
+                ip = address.rsplit(":", 1)[0] if ":" in address else address
+                notify_ok.setdefault(name, []).append(f"{name} {ip}｜{label} {from_v}→{to_v} 成功")
                 log(f"{now.strftime('%H:%M')} {name} {label} 已装 {shown}")
             else:
-                notify_fail.setdefault(name, []).append(f"{label} → {install_reason(out)}")
+                from_v = prev.get("installed") or installed or "无"
+                to_v = ident["version"] or "?"
+                ip = address.rsplit(":", 1)[0] if ":" in address else address
+                notify_fail.setdefault(name, []).append(f"{name} {ip}｜{label} {from_v}→{to_v} 失败：{install_reason(out)}")
                 log(f"{now.strftime('%H:%M')} {name} {label} 安装失败：{install_reason(out)}")
     if offline:
         state["offline"] = offline
@@ -904,8 +913,8 @@ def once(force=False):
 
     # 第⑤步：只报安装结果。成功列设备+软件+版本变化，失败列设备+软件+原因。没安装不通知。
     dl_line = f"本轮已下载 {dl_count} 个新包" if dl_count else ""
-    ok_text = "\n".join(f"{d}：{'、'.join(items)}" for d, items in notify_ok.items())
-    fail_text = "\n".join(f"{d}：{'、'.join(items)}" for d, items in notify_fail.items())
+    ok_text = "\n".join(item for items in notify_ok.values() for item in items)
+    fail_text = "\n".join(item for items in notify_fail.values() for item in items)
     if ok_text and fail_text:
         notice(cfg, "部分更新完成", f"成功：\n{ok_text}\n\n失败：\n{fail_text}")
         return f"部分更新完成\n成功：\n{ok_text}\n\n失败：\n{fail_text}"
@@ -1113,6 +1122,12 @@ class Handler(BaseHTTPRequestHandler):
                         self.send(400, "先选一台已保存的设备", "text/plain; charset=utf-8")
                         return
                     code, out = adb("-s", address, "install", "-r", str(path), timeout=300)
+                    if code != 0 and "UPDATE_INCOMPATIBLE" in out:
+                        ident = apk_identity(path)
+                        pkg = ident.get("package") or ""
+                        if pkg:
+                            adb("-s", address, "shell", "pm", "uninstall", "--user", "0", pkg, timeout=60)
+                            code, out = adb("-s", address, "install", "-r", str(path), timeout=300)
                     if code == 0 and "Success" in out:
                         self.send(200, "已推送到设备", "text/plain; charset=utf-8")
                     else:
