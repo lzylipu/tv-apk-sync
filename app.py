@@ -111,7 +111,10 @@ def parse_yaml(text):
             data[section].append(current)
         target = current if section in ("devices", "apps") else data.setdefault(section, {})
         if target is not None and key.strip():
-            target[key.strip()] = int(value) if key.strip() == "port" and str(value).isdigit() else value
+            if key.strip() in ("port", "min_sdk") and str(value).isdigit():
+                target[key.strip()] = int(value)
+            else:
+                target[key.strip()] = value
     return data
 
 
@@ -794,8 +797,6 @@ def once(force=False):
                 v = apk_identity(c).get("version") or ""
                 if v and (not local_ver or version_ge(v, local_ver)):
                     local_ver = v
-                if local_ver:
-                    break
         except Exception:
             pass
         recorded_ver = ""
@@ -1000,18 +1001,36 @@ class Handler(BaseHTTPRequestHandler):
             self.send(200, json.dumps(rows, ensure_ascii=False))
         elif self.path == "/api/devices":
             rows = []
+            state = load_json(STATE, {"apps": {}, "offline": {}})
+            offline = state.get("offline") or {}
+            now = datetime.now()
+            cooldown_s = max(1, int(current_config().get("install_minutes") or 10)) * 60
             for device in current_config().get("devices") or []:
                 address = device_address(device)
                 if not address.split(":")[0]:
                     continue
-                profile, err = device_profile(address)
                 row = {"name": device.get("name") or address, "ip": device.get("ip", ""), "address": address}
+                # 冷却期内不重试,直接显示离线,避免每次刷新白等 connect 20s
+                last_fail = offline.get(address)
+                if last_fail:
+                    try:
+                        if (now - datetime.fromisoformat(last_fail)).total_seconds() < cooldown_s:
+                            row.update({"online": False, "detail": "离线(冷却中，稍后重试)"})
+                            rows.append(row)
+                            continue
+                    except ValueError:
+                        pass
+                profile, err = device_profile(address)
                 if profile:
                     row.update({"online": True, "model": profile["model"], "android": profile["release"], "abi": profile["abi"], "sdk": profile["sdk"]})
                     row.update(device_stats(address))
                 else:
-                    row.update({"online": False, "detail": "没开机或 5555 没开"})
+                    offline[address] = now.isoformat(timespec="seconds")
+                    row.update({"online": False, "detail": err or "没开机或 5555 没开"})
                 rows.append(row)
+            if offline:
+                state["offline"] = offline
+                save_json(STATE, state)
             self.send(200, json.dumps(rows, ensure_ascii=False))
         elif self.path == "/api/log":
             lines = LOG.read_text(encoding="utf-8").splitlines() if LOG.exists() else []
@@ -1044,9 +1063,15 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/config":
                 incoming = self.read_json()
                 incoming.pop("github_token", None)
+                kept_devices = []
                 for device in incoming.get("devices") or []:
+                    ip = str(device.get("ip") or "").strip()
+                    if not ip:
+                        continue  # 空 IP 的设备不保存,避免生成 ":5555" 非法地址
                     device["port"] = int(device.get("port") or 5555)
                     device["address"] = device_address(device)
+                    kept_devices.append(device)
+                incoming["devices"] = kept_devices
                 incoming["pull_hours"] = max(1, int(incoming.get("pull_hours") or 24))
                 incoming["install_minutes"] = max(1, int(incoming.get("install_minutes") or 10))
                 save_config(incoming)

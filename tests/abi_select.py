@@ -53,6 +53,22 @@ class PickTests(unittest.TestCase):
         fail_text = "\n".join(item for items in notify_fail.values() for item in items)
         self.assertIn("失败：新包版本号比电视上已装的低", fail_text)
 
+    def test_local_ver_picks_highest_among_cached(self):
+        # 修复: 原逻辑只解析第一个缓存包就 break,若首包旧版+后包新版会误判已最新
+        local_ver = ""
+        vers = iter(["1.0", "1.2"])
+        app.apk_identity = lambda p: {"version": next(vers)}
+        for c in ["old.apk", "new.apk"]:
+            v = app.apk_identity(c).get("version") or ""
+            if v and (not local_ver or app.version_ge(v, local_ver)):
+                local_ver = v
+        self.assertEqual(local_ver, "1.2")
+
+    def test_parse_yaml_min_sdk_as_int(self):
+        y = "apps:\n  - name: x\n    source: https://github.com/a/b\n    min_sdk: 9\n"
+        d = app.parse_yaml(y)
+        self.assertEqual(d["apps"][0]["min_sdk"], 9)
+
     def test_skip_when_same_tag_already_installed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
