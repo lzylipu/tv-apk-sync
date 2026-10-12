@@ -22,6 +22,7 @@ CACHE = DATA / "apk"
 LOG = DATA / "sync.log"
 PAGE_FILE = Path(__file__).with_name("index.html")
 UA = "tv-apk-sync"
+PULL = {"running": False, "result": ""}
 LOCK = threading.Lock()
 DEFAULT = {
     "devices": [],
@@ -902,6 +903,7 @@ def once(force=False):
         save_json(STATE, state)
 
     # 第⑤步：只报安装结果。成功列设备+软件+版本变化，失败列设备+软件+原因。没安装不通知。
+    dl_line = f"本轮已下载 {dl_count} 个新包" if dl_count else ""
     ok_text = "\n".join(f"{d}：{'、'.join(items)}" for d, items in notify_ok.items())
     fail_text = "\n".join(f"{d}：{'、'.join(items)}" for d, items in notify_fail.items())
     if ok_text and fail_text:
@@ -913,6 +915,8 @@ def once(force=False):
     elif ok_text:
         notice(cfg, "更新完成", ok_text)
         return f"更新完成\n{ok_text}"
+    if dl_line:
+        return f"{dl_line}，设备未在线或无需安装"
     return "本轮没有需要更新的软件"
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -1017,6 +1021,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200, data, "application/vnd.android.package-archive")
                 return
             self.send(200, json.dumps(cache_rows(), ensure_ascii=False))
+        elif self.path == "/api/pull-status":
+            self.send(200, json.dumps(PULL, ensure_ascii=False))
         else:
             self.send(404, "{}")
 
@@ -1114,9 +1120,23 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self.send(400, "不支持这个操作", "text/plain; charset=utf-8")
             elif self.path == "/api/pull":
-                with LOCK:
-                    result = once(force=True)
-                self.send(200, result or "已检查一轮", "text/plain; charset=utf-8")
+                if PULL["running"]:
+                    self.send(200, "已有一轮拉取在跑，稍等", "text/plain; charset=utf-8")
+                    return
+                PULL["running"] = True
+                PULL["result"] = ""
+
+                def _run_pull():
+                    try:
+                        with LOCK:
+                            PULL["result"] = once(force=True) or "已检查一轮"
+                    except Exception as exc:
+                        PULL["result"] = f"本轮失败 {exc}"
+                    finally:
+                        PULL["running"] = False
+
+                threading.Thread(target=_run_pull, daemon=True).start()
+                self.send(200, "已开始拉取，看下方日志看进度", "text/plain; charset=utf-8")
             else:
                 self.send(404, "{}")
         except Exception as exc:

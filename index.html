@@ -470,13 +470,20 @@ async function runShell(){
 async function testNotify(){await save();toast(await (await fetch("/api/notify-test",{method:"POST"})).text())}
 async function pullNow(){
   const btn=document.querySelector("button[onclick='pullNow()']");
-  btn.disabled=true; btn.textContent="正在拉…";
-  try{
-    toast(await (await fetch("/api/pull",{method:"POST"})).text());
+  if(btn.disabled) return;
+  btn.disabled=true; btn.textContent="已开始拉取…";
+  const first=await (await fetch("/api/pull",{method:"POST"})).text();
+  toast(first);
+  const timer=setInterval(async()=>{
+    let s;
+    try{ s=await (await fetch("/api/pull-status")).json(); }
+    catch(e){ return; }
+    if(s.running){ btn.textContent="拉取中…"; return; }
+    clearInterval(timer);
+    btn.textContent="现在拉一次包"; btn.disabled=false;
+    if(s.result) toast(s.result);
     refreshLive();
-  } finally {
-    btn.disabled=false; btn.textContent="现在拉一次包";
-  }
+  },1500);
 }
 loadOnce().then(refreshLive);
 let apkFiles=[];
