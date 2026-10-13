@@ -109,6 +109,18 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
 .mem{font-variant-numeric:tabular-nums;font-weight:650;font-size:13px}
 .procrow .muted{font-size:13px}
 @media(max-width:760px){#pkgbar,#procbar,#shellbar,#cachebar{grid-template-columns:1fr 1fr}.shell{grid-template-columns:1fr}aside{margin:8px}.row,.app-row,.procrow{grid-template-columns:1fr}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){
+  aside{margin:8px;padding:10px 8px;position:static;height:auto;overflow:visible}
+  aside .brand{margin:0 0 8px}
+  aside .brand p{display:none}
+  aside .brand h1{font-size:14px}
+  nav{flex-direction:row;flex-wrap:nowrap;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  nav hr{display:none}
+  nav button{flex:1 1 0;min-width:0;width:auto;flex-direction:column;gap:3px;padding:6px 2px;text-align:center;font-size:10.5px;line-height:1.15}
+  nav button svg{width:16px;height:16px}
+  nav button span{font-size:10.5px;white-space:normal;word-break:break-all;text-align:center;max-width:100%}
+  main{padding:12px 10px}
+}
 </style>
 <div class="stage"></div>
 <div class="shell">
