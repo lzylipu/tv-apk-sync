@@ -123,8 +123,12 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
   aside{display:flex;flex-direction:column;gap:8px;margin:8px;padding:0;background:none;border:0;backdrop-filter:none;box-shadow:none;position:static;height:auto;overflow:visible}
   /* brand 一个气泡 */
   aside .brand{margin:0;padding:0;background:none;border:0;backdrop-filter:none;box-shadow:none;display:flex;align-items:center;gap:8px}
-  aside .brand{gap:8px}
-  aside .brandbox{display:flex;flex:1;min-width:0;align-items:center;gap:8px;padding:8px 12px;border-radius:18px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(28px) saturate(160%);box-shadow:0 10px 30px -14px rgba(0,0,0,.25)}
+  aside .brand{gap:8px;justify-content:space-between}
+  aside .brandbox{display:flex;flex:0 0 auto;width:fit-content;max-width:100%;min-width:0;align-items:center;gap:8px;padding:8px 12px;border-radius:18px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(28px) saturate(160%);box-shadow:0 10px 30px -14px rgba(0,0,0,.25)}
+  aside .brandbox>div{flex:0 0 auto;min-width:0;white-space:nowrap}
+  aside .brandbox h1,aside .brandbox p{white-space:nowrap;margin:0;width:auto;word-break:keep-all;overflow-wrap:normal}
+  aside .brandbox>div{width:auto}
+  aside .brandbox{padding:8px 10px 8px 8px}
   aside .brandbox .mark{flex:none;width:32px;height:32px;border-radius:10px}
   aside .brandbox>div{min-width:0}
   aside .brand .theme{flex:none}
