@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 import tempfile
 import threading
 import time
@@ -147,12 +148,11 @@ def save_json(path, data):
     tmp.replace(path)
 
 
-def http_json(url, token=""):
+def http_json(url):
     # 第三方 GitHub 加速代理前缀（免 token，突破 api.github.com 未认证 60 次/小时限流）
     proxies = [
         "https://gh-proxy.com/",
         "https://ghproxy.net/",
-        "https://mirror.ghproxy.com/",
         "https://ghfast.top/",
     ]
     attempts = [url]
@@ -162,8 +162,6 @@ def http_json(url, token=""):
     for target in attempts:
         try:
             req = urllib.request.Request(target, headers={"User-Agent": UA, "Accept": "application/vnd.github+json"})
-            if token:
-                req.add_header("Authorization", f"Bearer {token}")
             with urllib.request.urlopen(req, timeout=30) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except Exception as exc:
@@ -172,7 +170,7 @@ def http_json(url, token=""):
     raise last if last else RuntimeError("全部代理都失败")
 
 
-def download(url, dest, token=""):
+def download(url, dest):
     dest.parent.mkdir(parents=True, exist_ok=True)
     parts = urllib.parse.urlsplit(url)
     url = urllib.parse.urlunsplit(parts._replace(path=urllib.parse.quote(urllib.parse.unquote(parts.path), safe="/%")))
@@ -180,7 +178,6 @@ def download(url, dest, token=""):
     proxies = [
         "https://gh-proxy.com/",
         "https://ghproxy.net/",
-        "https://mirror.ghproxy.com/",
         "https://ghfast.top/",
     ]
     attempts = [url]
@@ -190,8 +187,6 @@ def download(url, dest, token=""):
     for target in attempts:
         try:
             req = urllib.request.Request(target, headers={"User-Agent": UA, "Accept": "application/octet-stream"})
-            if token and ("github.com" in target or "githubusercontent.com" in target):
-                req.add_header("Authorization", f"Bearer {token}")
             tmp = dest.with_name(dest.name + ".part")
             try:
                 with urllib.request.urlopen(req, timeout=180) as resp, tmp.open("wb") as handle:
@@ -230,6 +225,28 @@ def prop(address, name):
     return out.strip() if code == 0 else ""
 
 
+def soc_vendor(soc):
+    soc = (soc or "").strip()
+    if not soc:
+        return ""
+    low = soc.lower()
+    if low.startswith(("mt", "mtk", "m7")):   # m7642 也是 MTK 平台代号
+        return "MediaTek " + soc.upper()
+    if low.startswith(("sdm", "sm8", "sm7", "sm6", "qcom", "msm")):
+        return "Qualcomm " + soc.upper()
+    if low.startswith(("hi3", "hi7", "hi9", "kirin", "hisicon")):
+        return "HiSilicon " + soc.upper()
+    if low.startswith(("s9", "s8", "axg", "aml")):
+        return "Amlogic " + soc.upper()
+    if low.startswith("rk"):
+        return "Rockchip " + soc.upper()
+    if "exynos" in low:
+        return "Samsung Exynos"
+    if low.startswith("aml"):
+        return "Amlogic " + soc.upper()
+    return soc.upper() if len(low) <= 8 else soc
+
+
 def abi_family(abi):
     abi = (abi or "").lower()
     if "arm64" in abi or "aarch64" in abi:
@@ -241,6 +258,26 @@ def abi_family(abi):
     if "x86" in abi:
         return "x86"
     return ""
+
+
+ARM_PARTS = {
+    "0xd03": "Cortex-A53", "0xd05": "Cortex-A55", "0xd07": "Cortex-A57", "0xd08": "Cortex-A72",
+    "0xd09": "Cortex-A73", "0xd0a": "Cortex-A75", "0xd0b": "Cortex-A76", "0xd0d": "Cortex-A77",
+    "0xd41": "Cortex-A78", "0xd44": "Cortex-X1", "0xd46": "Cortex-A510", "0xd47": "Cortex-A710",
+    "0xd48": "Cortex-X2", "0xd4d": "Cortex-A715", "0xd4e": "Cortex-X3", "0xd81": "Cortex-A720",
+    "0xd82": "Cortex-X4", "0xc07": "Cortex-A7", "0xc0f": "Cortex-A15",
+}
+
+
+def cpu_cores(address):
+    code, out = adb("-s", address, "shell", "grep -m2 'CPU part' /proc/cpuinfo", timeout=15)
+    parts = re.findall(r"CPU part\s*:\s*(0x[0-9a-fA-F]+)", out or "")
+    names = []
+    for part in parts:
+        name = ARM_PARTS.get(part.lower())
+        if name and name not in names:
+            names.append(name)
+    return " + ".join(names)
 
 
 def sdk_int(value):
@@ -398,6 +435,7 @@ def device_profile(address):
     ok, detail = connect(address)
     if not ok:
         return None, detail or "连不上"
+    soc = soc_vendor(prop(address, "ro.board.platform") or prop(address, "ro.hardware"))
     abi = prop(address, "ro.product.cpu.abi")
     abilist = prop(address, "ro.product.cpu.abilist")
     sdk = sdk_int(prop(address, "ro.build.version.sdk"))
@@ -406,7 +444,7 @@ def device_profile(address):
     family = abi_family(abi)
     if not family:
         return None, f"认不出 CPU：{abi or abilist or '空'}"
-    return {"abi": abi, "abilist": abilist, "sdk": sdk, "release": release, "model": model, "family": family}, ""
+    return {"abi": abi, "abilist": abilist, "sdk": sdk, "release": release, "model": model, "family": family, "soc": soc, "cores": cpu_cores(address)}, ""
 
 
 def installed_version(address, package):
@@ -415,6 +453,50 @@ def installed_version(address, package):
         return ""
     match = re.search(r"versionName=(\S+)", out)
     return match.group(1) if match else ""
+
+
+ACTION_ERRORS = [
+    ("device '", "设备没连上，请确认开机且 ADB 无线调试(5555)已开"),
+    ("not found", "设备没连上，请确认开机且 ADB 无线调试(5555)已开"),
+    ("not installed for", "这台设备没装这个应用（或已被卸载）"),
+    ("Failure [not installed", "这台设备没装这个应用（或已被卸载）"),
+    ("DELETE_FAILED_DEVICE_POLICY_MANAGER", "被设备管理器锁定，不能卸载。先在系统设置里取消设备管理器"),
+    ("DELETE_FAILED_INTERNAL_ERROR", "系统内部错误，卸载没执行"),
+    ("DELETE_FAILED_USER_RESTRICTED", "系统限制了这个用户卸载"),
+    ("DELETE_FAILED_OWNERSHIP", "应用属于其他用户，当前用户不能卸载"),
+    ("USER_RESTRICTED", "系统限制了当前用户的操作"),
+    ("is not installed", "设备上没装这个应用"),
+    ("Unknown package", "设备上没装这个应用"),
+    ("Permission Denial", "没有权限，应用受系统保护"),
+    ("SecurityException", "系统安全策略拒绝了这个操作"),
+    ("device offline", "设备掉线了，请重新连接"),
+    ("No such file", "找不到文件"),
+    ("Operation not permitted", "系统不允许这个操作"),
+    ("Command not found", "设备不认识这条命令"),
+    ("Broken pipe", "系统服务没响应（可能是系统应用被停用导致），重启设备可恢复"),
+    ("Failure calling service", "系统服务没响应，重启设备可恢复"),
+    ("Killed", "操作被系统终止，可能被安全策略拦截"),
+    ("Bad argument", "参数不被设备接受"),
+    ("unknown command", "设备不认识这条命令"),
+    ("INSTALL_FAILED_INSUFFICIENT_STORAGE", "设备存储空间不够"),
+    ("INSTALL_FAILED_ALREADY_EXISTS", "设备上已装同名应用且签名不同，需要先卸载"),
+    ("INSTALL_FAILED_NO_MATCHING_ABIS", "这个包和设备的 CPU 架构不匹配"),
+    ("INSTALL_FAILED_OLDER_SDK", "这个包要求的安卓版本比设备高"),
+    ("INSTALL_FAILED_UPDATE_INCOMPATIBLE", "签名和设备上已装的不一致，需要先卸载旧版"),
+    ("INSTALL_FAILED_VERIFICATION_FAILURE", "被系统的安装校验拦住了"),
+    ("INSTALL_FAILED_USER_RESTRICTED", "系统限制了安装（常见于电视的儿童锁或安装限制）"),
+    ("Failure [", "系统拒绝了这次操作："),
+]
+
+
+def action_reason(text):
+    """把 adb 英文报错换成人话。"""
+    raw = (text or "").strip()
+    low = raw.lower()
+    for key, cn in ACTION_ERRORS:
+        if key.lower() in low:
+            return cn
+    return raw
 
 
 def install_reason(out):
@@ -429,6 +511,9 @@ def install_reason(out):
         return "文件不是完整 APK，下载可能中断"
     if "device offline" in text or "not found" in text:
         return "安装过程中电视断开了"
+    mapped = action_reason(text)
+    if mapped != text:
+        return mapped
     tail = [line.strip() for line in text.splitlines() if line.strip()]
     return tail[-1] if tail else "adb 没返回原因"
 
@@ -470,6 +555,13 @@ def notice(cfg, title, text):
         log(f"通知失败 {exc}")
 
 
+def device_label(address):
+    for item in current_config().get("devices") or []:
+        if device_address(item) == address:
+            return item.get("name") or address
+    return address
+
+
 def device_address(device):
     if device.get("address"):
         return device["address"]
@@ -480,11 +572,67 @@ def known_address(address):
     return address in {device_address(item) for item in current_config().get("devices") or []}
 
 
+def app_labels_all(address):
+    """一次 dumpsys 拿到所有包的 label/version 映射，避免逐包调用。"""
+    code, out = adb("-s", address, "shell", "dumpsys", "package", timeout=120)
+    if code != 0 or not out:
+        return {}
+    table = {}
+    cur = ""
+    for line in out.splitlines():
+        m = re.match(r"\s*Package \[([^\]]+)\]", line)
+        if m:
+            cur = m.group(1).strip()
+            continue
+        if not cur:
+            continue
+        lm = re.search(r"application-label(?:-zh)?:'([^']*)'", line)
+        if lm and cur not in table:
+            table.setdefault(cur, {})["label"] = lm.group(1)
+        vm = re.search(r"versionName=(\S+)", line)
+        if vm and "version" not in table.get(cur, {}):
+            table.setdefault(cur, {})["version"] = vm.group(1)
+    return table
+
+
+_LABEL_CACHE = {}
+
+
 def app_label(address, package):
     code, out = adb("-s", address, "shell", "dumpsys", "package", package, timeout=20)
     label = re.search(r"application-label(?:-zh)?:'([^']*)'", out)
     version = re.search(r"versionName=(\S+)", out)
-    return (label.group(1) if label else ""), (version.group(1) if version else "")
+    ver = version.group(1) if version else ""
+    lab = label.group(1) if label else ""
+    if lab:
+        return lab, ver
+    # dumpsys 没有 label（不少 TV 应用如此）：把 APK 拉回本地用容器内 aapt 读 badging
+    code, path = adb("-s", address, "shell", "pm", "path", package, timeout=15)
+    m = re.search(r"package:(\S+\.apk)", path)
+    if not m:
+        return "", ver
+    apk_path = m.group(1)
+    cache_key = f"{address}|{apk_path}"
+    if cache_key in _LABEL_CACHE:
+        lab, cver = _LABEL_CACHE[cache_key]
+        return lab, (ver or cver)
+    with tempfile.TemporaryDirectory() as td:
+        apk_local = Path(td) / "app.apk"
+        code, _ = adb("-s", address, "pull", apk_path, str(apk_local), timeout=90)
+        if not apk_local.exists():
+            return "", ver
+        try:
+            proc = subprocess.run(["aapt", "dump", "badging", str(apk_local)], capture_output=True, text=True, timeout=30)
+            out = (proc.stdout or "") + (proc.stderr or "")
+        except Exception:
+            return "", ver
+    lab = re.search(r"application-label(?:-zh)?:'([^']*)'", out)
+    v2 = re.search(r"versionName='([^']*)'", out)
+    if v2 and not ver:
+        ver = v2.group(1)
+    label_text = lab.group(1) if lab else ""
+    _LABEL_CACHE[cache_key] = (label_text, ver)
+    return label_text, ver
 
 
 def source_of(app):
@@ -615,11 +763,11 @@ def release_line(source):
     }
 
 
-def resolve_release(source, family, token):
+def resolve_release(source, family):
     line = release_line(source)
     repo = line["repo"] if line else github_repo(source)
     if repo:
-        releases = http_json(f"https://api.github.com/repos/{repo}/releases?per_page=30", token)
+        releases = http_json(f"https://api.github.com/repos/{repo}/releases?per_page=30")
         if line:
             groups = [item for item in release_groups(releases) if item["shape"] == line["shape"]]
             group = groups[0] if groups else None
@@ -703,7 +851,6 @@ def once(force=False):
     # 第①步：读取配置。没配置设备/软件就不跑。
     cfg = current_config()
     state = load_json(STATE, {"apps": {}, "checked_at": ""})
-    token = os.environ.get("GITHUB_TOKEN", "").strip()
     notify_ok = {}
     notify_fail = {}
     changed = False
@@ -735,7 +882,7 @@ def once(force=False):
             if source.startswith("file:"):
                 continue
             try:
-                chosen = resolve_release(source, "", token)
+                chosen = resolve_release(source, "")
             except urllib.error.HTTPError as exc:
                 log(f"{label} 查版本失败 HTTP {exc.code}")
                 continue
@@ -752,7 +899,7 @@ def once(force=False):
                 path = cache_dest(source, chosen["tag"], item["name"])
                 if not path.exists() or (item["size"] and path.stat().st_size != item["size"]):
                     try:
-                        download(item["url"], path, token)
+                        download(item["url"], path)
                         downloaded = True
                         dl_count += 1
                         log(f"下载 {label} {item['name']}")
@@ -850,6 +997,8 @@ def once(force=False):
                 offline.pop(address, None)
                 profiles[address] = profile
                 device["model"] = profile["model"]
+                device["soc"] = profile.get("soc", "")
+                device["cores"] = profile.get("cores", "")
                 device["abi"] = profile["abi"]
                 device["android"] = profile["release"]
                 device["seen_at"] = now.isoformat(timespec="seconds")
@@ -969,17 +1118,35 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200, json.dumps({"offline": True, "rows": []}, ensure_ascii=False))
                 return
             kind = (query.get("kind") or ["user"])[0]
+            with_labels = (query.get("labels") or ["1"])[0] != "0"
             flag = "-3" if kind == "user" else "-s"
             code, out = adb("-s", address, "shell", "pm", "list", "packages", "-f", flag, timeout=30)
-            rows=[]
+            parsed = []
             for line in out.splitlines():
                 if "package:" not in line:
                     continue
                 body = line.split("package:", 1)[-1]
                 path, pkg = body.rsplit("=", 1)
-                label, version = app_label(address, pkg.strip())
-                rows.append({"package": pkg.strip(), "version": version, "label": label, "path": path})
-            rows.sort(key=lambda item: (item["label"] or item["package"]).lower())
+                parsed.append((pkg.strip(), path))
+            rows = []
+            def _labels(pkg):
+                lab, ver = app_label(address, pkg)
+                return pkg, lab, ver
+            if with_labels:
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    info = {r[0]: (r[1], r[2]) for r in pool.map(_labels, [p for p, _ in parsed])}
+            else:
+                # 快速模式：只并行取版本号（不读 APK），名称留空由第二阶段补
+                def _ver(pkg):
+                    code, out = adb("-s", address, "shell", "dumpsys", "package", pkg, timeout=20)
+                    m = re.search(r"versionName=(\S+)", out or "")
+                    return pkg, (m.group(1) if m else "")
+                with ThreadPoolExecutor(max_workers=8) as pool:
+                    info = {pkg: ("", ver) for pkg, ver in pool.map(_ver, [p for p, _ in parsed])}
+            for pkg, path in parsed:
+                lab, ver = info.get(pkg, ("", ""))
+                rows.append({"package": pkg, "version": ver, "label": lab, "path": path})
+            rows.sort(key=lambda item: item["package"].lower())
             self.send(200, json.dumps(rows, ensure_ascii=False))
         elif self.path.startswith("/api/processes"):
             from urllib.parse import urlparse, parse_qs
@@ -993,13 +1160,29 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200, json.dumps({"offline": True, "rows": []}, ensure_ascii=False))
                 return
             code, out = adb("-s", address, "shell", "ps", "-A", "-o", "USER,PID,RSS,NAME", timeout=20)
+            # 已装应用的包名→名称映射（进程名多为包名，直接查表给中文/真实名称）
+            label_map = {}
+            code, pkgs = adb("-s", address, "shell", "pm", "list", "packages", timeout=25)
+            for line in (pkgs or "").splitlines():
+                if "package:" in line:
+                    label_map[line.split("package:", 1)[-1].strip()] = ""
             rows=[]
             for line in out.splitlines()[1:]:
                 parts=line.split()
                 if len(parts) < 4 or not parts[1].isdigit():
                     continue
                 rss=int(parts[2]) if parts[2].isdigit() else 0
-                rows.append({"user": parts[0], "pid": parts[1], "rss": rss, "name": parts[-1]})
+                name=parts[-1]
+                rows.append({"user": parts[0], "pid": parts[1], "rss": rss, "name": name})
+            # 只对出现在进程里的包名补名称（数量有限，避免整机遍历）
+            need = [r["name"].split(":")[0] for r in rows if r["name"].split(":")[0] in label_map]
+            seen = {}
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                for pkg, lab, _ver in pool.map(lambda p: (p,) + app_label(address, p), sorted(set(need))):
+                    seen[pkg] = lab
+            for r in rows:
+                base = r["name"].split(":")[0]
+                r["label"] = seen.get(base, "") or ""
             rows.sort(key=lambda item: item["rss"], reverse=True)
             self.send(200, json.dumps(rows, ensure_ascii=False))
         elif self.path == "/api/devices":
@@ -1025,7 +1208,7 @@ class Handler(BaseHTTPRequestHandler):
                         pass
                 profile, err = device_profile(address)
                 if profile:
-                    row.update({"online": True, "model": profile["model"], "android": profile["release"], "abi": profile["abi"], "sdk": profile["sdk"]})
+                    row.update({"online": True, "model": profile["model"], "android": profile["release"], "abi": profile["abi"], "soc": profile.get("soc", ""), "cores": profile.get("cores", ""), "sdk": profile["sdk"]})
                     row.update(device_stats(address))
                 else:
                     row.update({"online": False, "detail": err or "没开机或 5555 没开"})
@@ -1057,6 +1240,29 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            if self.path == "/api/devices-refresh":
+                cfg = current_config()
+                state = load_json(STATE, {"apps": {}, "offline": {}})
+                offline = state.get("offline") or {}
+                rows = []
+                for device in cfg.get("devices") or []:
+                    address = device_address(device)
+                    if not address.split(":")[0]:
+                        continue
+                    row = {"name": device.get("name") or address, "ip": device.get("ip", ""), "address": address}
+                    profile, err = device_profile(address)
+                    if profile:
+                        offline.pop(address, None)
+                        row.update({"online": True, "model": profile["model"], "android": profile["release"], "abi": profile["abi"], "soc": profile.get("soc", ""), "cores": profile.get("cores", ""), "sdk": profile["sdk"]})
+                        row.update(device_stats(address))
+                    else:
+                        offline[address] = datetime.now().isoformat(timespec="seconds")
+                        row.update({"online": False, "detail": err or "没开机或 5555 没开"})
+                    rows.append(row)
+                state["offline"] = offline
+                save_json(STATE, state)
+                self.send(200, json.dumps(rows, ensure_ascii=False))
+                return
             if self.path == "/api/upload":
                 added, error = save_uploads(self)
                 self.send(200, json.dumps({"added": added, "error": error}, ensure_ascii=False))
@@ -1075,7 +1281,20 @@ class Handler(BaseHTTPRequestHandler):
                 incoming["devices"] = kept_devices
                 incoming["pull_hours"] = max(1, int(incoming.get("pull_hours") or 24))
                 incoming["install_minutes"] = max(1, int(incoming.get("install_minutes") or 10))
+                before = current_config()
                 save_config(incoming)
+                for added in [d for d in incoming["devices"] if device_address(d) not in {device_address(x) for x in before.get("devices") or []}]:
+                    log(f"添加设备 {added.get('name') or device_address(added)}")
+                for gone in [d for d in before.get("devices") or [] if device_address(d) not in {device_address(x) for x in incoming["devices"]}]:
+                    log(f"删除设备 {gone.get('name') or device_address(gone)}")
+                old_src = [source_of(a) for a in before.get("apps") or []]
+                for app in incoming.get("apps") or []:
+                    if source_of(app) not in old_src:
+                        log(f"添加链接 {app.get('name') or source_of(app)}")
+                new_src = [source_of(a) for a in incoming.get("apps") or []]
+                for app in before.get("apps") or []:
+                    if source_of(app) not in new_src:
+                        log(f"删除链接 {app.get('name') or source_of(app)}")
                 self.send(200, "{\"ok\":true}")
             elif self.path == "/api/notify-test":
                 sent = send_notice(current_config(), "电视装包测试", "通知通道可用")
@@ -1088,7 +1307,9 @@ class Handler(BaseHTTPRequestHandler):
                     self.send(400, "填已保存的设备和命令。不要再加 adb 前缀", "text/plain; charset=utf-8")
                     return
                 code, out = adb("-s", address, "shell", command, timeout=30)
-                self.send(200, out or f"退出码 {code}", "text/plain; charset=utf-8")
+                result = (out or "").strip() or ("成功" if code == 0 else f"退出码 {code}")
+                log(f"{device_label(address)} 执行命令 {command}")
+                self.send(200, result, "text/plain; charset=utf-8")
             elif self.path == "/api/app-action":
                 body = self.read_json()
                 address = body.get("address", "")
@@ -1097,6 +1318,7 @@ class Handler(BaseHTTPRequestHandler):
                 if not known_address(address) or not re.fullmatch(r"[A-Za-z0-9._]+", package):
                     self.send(400, "设备或包名不对", "text/plain; charset=utf-8")
                     return
+                act_names = {"uninstall": "卸载", "clear": "清除数据", "disable": "停用", "enable": "启用", "stop": "强制停止", "cache": "清缓存"}
                 commands = {
                     "uninstall": ["pm", "uninstall", "--user", "0", package],
                     "clear": ["pm", "clear", package],
@@ -1104,20 +1326,31 @@ class Handler(BaseHTTPRequestHandler):
                     "enable": ["pm", "enable", package],
                     "stop": ["am", "force-stop", package],
                 }
+                cache_ok = False
                 if action == "cache":
                     code, out = adb("-s", address, "shell", "pm", "clear", "--cache-only", package, timeout=30)
                     text = (out or "").strip()
                     if code == 0 and "Success" in text:
-                        out = "缓存已清"
+                        cache_ok = True
                     else:
                         code, out = adb("-s", address, "shell", "cmd", "package", "trim-caches", "999999999999", timeout=30)
-                        out = "已请求系统清理缓存" if code == 0 else (text or out)
+                        cache_ok = code == 0
                 elif action in commands:
                     code, out = adb("-s", address, "shell", *commands[action], timeout=40)
                 else:
                     self.send(400, "不支持这个操作", "text/plain; charset=utf-8")
                     return
-                self.send(200, (out or "完成").strip(), "text/plain; charset=utf-8")
+                raw = (out or "").strip()
+                low = raw.lower()
+                ok_text = ("success" in low) or ("new state:" in low) or raw == ""
+                if action == "cache":
+                    result = "成功" if cache_ok else "失败：" + (action_reason(raw) or "退出码 " + str(code))
+                elif code == 0 and ok_text and "error" not in low and "not found" not in low:
+                    result = "成功"
+                else:
+                    result = "失败：" + (action_reason(raw) or "退出码 " + str(code))
+                log(f"{device_label(address)} {act_names.get(action, action)} {package}：{result}")
+                self.send(200, result, "text/plain; charset=utf-8")
             elif self.path == "/api/kill":
                 body = self.read_json()
                 address = body.get("address", "")
@@ -1130,6 +1363,7 @@ class Handler(BaseHTTPRequestHandler):
                     code, out = adb("-s", address, "shell", "am", "force-stop", name, timeout=20)
                 else:
                     code, out = adb("-s", address, "shell", "kill", pid, timeout=20)
+                log(f"{device_label(address)} 停止进程 {name or pid}")
                 self.send(200, (out or "已停止").strip(), "text/plain; charset=utf-8")
             elif self.path == "/api/cache-action":
                 body = self.read_json()
@@ -1140,6 +1374,7 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 if action == "delete":
                     path.unlink()
+                    log(f"删除软件包 {path.name}")
                     self.send(200, "已删除", "text/plain; charset=utf-8")
                     return
                 if action == "push":
@@ -1154,10 +1389,14 @@ class Handler(BaseHTTPRequestHandler):
                         if pkg:
                             adb("-s", address, "shell", "pm", "uninstall", "--user", "0", pkg, timeout=60)
                             code, out = adb("-s", address, "install", "-r", str(path), timeout=300)
+                    name = device_label(address)
                     if code == 0 and "Success" in out:
+                        log(f"手动推送 {path.name} → {name} 成功")
                         self.send(200, "已推送到设备", "text/plain; charset=utf-8")
                     else:
-                        self.send(200, install_reason(out), "text/plain; charset=utf-8")
+                        reason = install_reason(out)
+                        log(f"手动推送 {path.name} → {name} 失败：{reason}")
+                        self.send(200, reason, "text/plain; charset=utf-8")
                     return
                 self.send(400, "不支持这个操作", "text/plain; charset=utf-8")
             elif self.path == "/api/pull":

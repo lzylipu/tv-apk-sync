@@ -30,6 +30,10 @@ main{padding:12px 16px 16px 4px}
 .theme .sun circle{fill:currentColor;stroke:none}
 .pane{display:none;background:var(--glass);border:1px solid var(--line);border-radius:22px;padding:18px;backdrop-filter:blur(28px) saturate(160%);box-shadow:0 24px 64px -16px rgba(0,0,0,.22)}
 .pane.on{display:block}
+.pane-tall{flex-direction:column;min-height:calc(100vh - 96px)}
+.pane-tall.on{display:flex}
+.pane-tall #shellOut{flex:1 1 auto;overflow:auto}
+
 h2{margin:0 0 6px;font-size:18px}.hint{color:var(--muted);margin:0 0 16px}
 .row{display:grid;grid-template-columns:1fr 1.3fr .5fr auto;gap:8px;align-items:end;margin:0 0 8px}
 .app-row{grid-template-columns:1fr 3fr auto}
@@ -62,22 +66,49 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
 .toast.bad{background:#ff3b30;color:#fff;border-color:#d70015}
 .toolbar{display:flex;gap:8px;align-items:center;margin:0 0 12px;flex-wrap:wrap}
 .toolbar input{max-width:280px}
+#pkgbar{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,2fr) auto auto;gap:8px;align-items:center}
+#pkgbar input{max-width:none}
+#procbar{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,2fr) auto;gap:8px;align-items:center}
+#procbar select,#procbar input{max-width:none}
+#shellbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;gap:8px;align-items:center;margin:0 0 12px}
+#cachebar{display:flex;gap:8px;align-items:center;margin:0 0 12px}
+#cachebar select{width:280px;max-width:60vw}
+#shellbar select,#shellbar input{max-width:none}
+#shellOut{min-height:72px;padding:10px 12px;font-size:13px;line-height:1.5;margin-bottom:0}
+.cmdhint{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);grid-column:1/-1}
+.cmdhint a{color:var(--accent);text-decoration:none;padding:2px 6px;border:1px solid var(--line);border-radius:8px;background:var(--fill);cursor:pointer}
+.cmdhint a:hover{background:var(--field)}
 .tree{display:flex;flex-direction:column;gap:12px}
 .source{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--fill)}
 .source h3{margin:0;padding:12px 14px;background:transparent;font-size:16px}
 .source .meta{padding:0 14px 10px;color:var(--muted);font-size:12px;word-break:break-all}
 .file{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
 .file .muted,.file .pkg{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.appcard{border:1px solid var(--line);border-radius:16px;padding:12px;background:var(--fill);display:flex;flex-direction:column;gap:8px}
+@media(min-width:761px){
+  html,body{height:100%;overflow:hidden}
+  .shell{height:100vh}
+  aside{position:sticky;top:12px;align-self:start;height:calc(100vh - 24px);overflow-y:auto}
+  main{height:100vh;overflow-y:auto}
+}
+.appcard{border:1px solid var(--line);border-radius:16px;padding:10px 12px;background:var(--fill);display:flex;flex-direction:row;align-items:center;gap:12px}
+.appcard>div:first-child{flex:1;min-width:0;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,2fr) minmax(0,6fr);gap:10px;align-items:baseline}
+.appcard>div:first-child>*{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.appcard>div:first-child b{font-size:15px}
+.appcard>div:first-child .muted{font-size:12px}
+.appcard>div:first-child .pkg{font-size:12px}
 .appcard b{font-size:15px}.pkg{font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);word-break:break-all}
 .appcard .ops{flex-wrap:wrap}
 .ops{display:flex;gap:6px;flex-wrap:nowrap;flex:none}
 .ops button,.ops a{padding:6px 9px;font-size:13px;white-space:nowrap}
 .ops a{background:var(--fill);color:var(--ink);border:1px solid var(--line)}
 .proclist{display:flex;flex-direction:column;gap:6px;max-height:68vh;overflow:auto}
-.procrow{display:grid;grid-template-columns:84px 70px 1fr auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:8px 10px;background:var(--fill)}
-.mem{font-variant-numeric:tabular-nums;font-weight:650}
-@media(max-width:760px){.shell{grid-template-columns:1fr}aside{margin:8px}.row,.app-row,.procrow{grid-template-columns:1fr}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.procrow{display:grid;grid-template-columns:84px 62px minmax(0,0.7fr) minmax(0,2.5fr) auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:8px 10px;background:var(--fill)}
+.procname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:650}
+.procpkg{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--muted)}
+.procrow button{padding:6px 9px;font-size:13px;white-space:nowrap;flex:none}
+.mem{font-variant-numeric:tabular-nums;font-weight:650;font-size:13px}
+.procrow .muted{font-size:13px}
+@media(max-width:760px){#pkgbar,#procbar,#shellbar,#cachebar{grid-template-columns:1fr 1fr}.shell{grid-template-columns:1fr}aside{margin:8px}.row,.app-row,.procrow{grid-template-columns:1fr}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 <div class="stage"></div>
 <div class="shell">
@@ -110,8 +141,8 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
     <h2>软件</h2>
     <p class="hint">填 GitHub 仓库、仓库网址，或 APK 直链。不用填包名。定时扫描最新版，设备在线才安装。</p>
     <div id="appList"></div>
-    <button class="ghost" onclick="addApp()">添加软件</button>
-    <div class="actions"><button class="primary" onclick="save()">保存</button><button class="ghost" onclick="openApk()">导入 APK</button><button class="ghost" onclick="pullNow()">现在拉一次包</button></div>
+    <div class="actions" style="margin:0 0 8px"><button class="ghost" onclick="addApp()">添加软件</button><button class="ghost" onclick="openApk()">导入 APK</button></div>
+    <div class="actions"><button class="primary" onclick="save()">保存</button><button class="ghost" onclick="pullNow()">现在拉一次包</button></div>
   </section>
   <section id="notify" class="pane">
     <h2>通知</h2>
@@ -124,9 +155,9 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
     <div class="actions"><button class="primary" onclick="save()">保存</button><button class="ghost" onclick="testNotify()">发一条测试</button><button class="ghost" onclick="exportConfig()">导出配置</button><button class="ghost" onclick="document.getElementById('importFile').click()">导入配置</button><input id="importFile" type="file" accept=".yaml,.yml,application/yaml,application/json" hidden onchange="importConfig(this)"></div>
   </section>
   <section id="status" class="pane">
-    <h2>状态</h2>
+    <h2>状态 <button class="ghost" id="liveRefresh" onclick="manualRefresh(this)" style="font-size:13px;padding:5px 12px;vertical-align:middle;margin-left:8px">刷新</button></h2>
     <p class="hint">只刷新这一块。间隔在通知里配置。</p>
-    <div id="live"><p class="muted">保存设备后显示</p></div>
+    <div id="live"><p class="muted">正在读取设备…</p></div>
   </section>
   <section id="log" class="pane">
     <h2>日志</h2>
@@ -136,7 +167,7 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
   <section id="cache" class="pane">
     <h2>本地包</h2>
     <p class="hint">按你填的名称和链接拉下来的 APK 在这里。点推送就装到选中的设备，下载是把文件存到这台电脑，删除只删缓存，不卸电视上的应用。</p>
-    <div class="toolbar">
+    <div class="toolbar" id="cachebar">
       <select id="cacheDevice"></select>
       <button class="ghost" onclick="loadCache()">刷新</button>
     </div>
@@ -145,10 +176,10 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
   <section id="installed" class="pane">
     <h2>已装应用</h2>
     <p class="hint">自己安装的和系统应用分开。清缓存不动账号数据。清除数据会退出登录。卸载系统应用只对当前用户生效，可以再启用。</p>
-    <div class="toolbar">
+    <div class="toolbar" id="pkgbar">
       <select id="appDevice"></select>
       <input id="appQuery" placeholder="搜名称或包名" oninput="renderPackages()">
-      <button class="ghost" onclick="loadPackages('user')">自己安装的</button>
+      <button class="ghost" onclick="loadPackages('user')">用户应用</button>
       <button class="ghost" onclick="loadPackages('system')">系统应用</button>
     </div>
     <div id="pkgList" class="appgrid"><p class="muted">先选一台在线设备</p></div>
@@ -156,19 +187,30 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
   <section id="proc" class="pane">
     <h2>进程</h2>
     <p class="hint">按内存从大到小排。上面的就是占得最多的，可以停止。系统底层进程停不掉会提示。</p>
-    <div class="toolbar">
+    <div class="toolbar" id="procbar">
       <select id="procDevice"></select>
       <input id="procQuery" placeholder="搜进程名" oninput="renderProcesses()">
       <button class="ghost" onclick="loadProcesses()">刷新进程</button>
     </div>
     <div id="procBox" class="proclist"><p class="muted">还没读取</p></div>
   </section>
-  <section id="shell" class="pane">
+  <section id="shell" class="pane pane-tall">
     <h2>命令行</h2>
     <p class="hint">只填 shell 后面的内容，不要再写 adb。例如 pm list packages。</p>
-    <p><label>设备</label><select id="shellDevice"></select></p>
-    <p><label>命令</label><input id="shellCmd" placeholder="pm list packages -3"></p>
-    <div class="actions"><button onclick="runShell()">执行</button></div>
+    <div class="toolbar" id="shellbar">
+      <select id="shellDevice"></select>
+      <input id="shellCmd" placeholder="pm list packages -3">
+      <div class="cmdhint">
+        <span>常用：</span>
+        <a href="javascript:void(0)" onclick="quickCmd('reboot')">重启</a>
+        <a href="javascript:void(0)" onclick="quickCmd('_pm list packages -3')">三方应用</a>
+        <a href="javascript:void(0)" onclick="quickCmd('getprop ro.build.version.release')">系统版本</a>
+        <a href="javascript:void(0)" onclick="quickCmd('df -h /data')">存储</a>
+        <a href="javascript:void(0)" onclick="quickCmd('cat /proc/meminfo | head -3')">内存</a>
+        <a href="javascript:void(0)" onclick="quickCmd('top -n 1 | head -10')">CPU</a>
+      </div>
+      <button onclick="runShell()">执行</button>
+    </div>
     <pre id="shellOut">还没有结果</pre>
   </section>
 </main>
@@ -199,7 +241,16 @@ const attr=s=>encodeURIComponent(String(s??""));
 function show(id,btn){
   document.querySelectorAll(".pane").forEach(el=>el.classList.toggle("on",el.id===id));
   document.querySelectorAll("nav button").forEach(el=>el.classList.toggle("on",el===btn));
+  try{localStorage.setItem("tvPane",id)}catch(e){}
   if(id==="cache") loadCache();
+  if(id==="log") refreshLog();
+}
+function restorePane(){
+  let id="";
+  try{id=localStorage.getItem("tvPane")||""}catch(e){}
+  if(!id) return;
+  const btn=document.querySelector(`nav button[data-pane="${id}"]`);
+  if(btn) show(id,btn);
 }
 function field(obj,key){return `<input data-k="${key}" value="${esc(obj[key]??"")}">`}
 function paintForms(){
@@ -329,6 +380,8 @@ async function loadOnce(){
   loaded=true;
 }
 async function refreshLive(){
+  const box=document.getElementById("live");
+  if(box && /正在读取|保存设备后/.test(box.textContent)) box.innerHTML='<p class="muted">正在检测设备在线状态…</p>';
   const live=await (await fetch("/api/devices")).json();
   window.liveDevices=live;
   const sel=document.getElementById("shellDevice");
@@ -342,7 +395,26 @@ async function refreshLive(){
   });
   if(prev) sel.value=prev;
   document.getElementById("live").innerHTML=live.map(deviceCard).join("")||'<p class="muted">保存设备后这里显示是否在线</p>';
-  document.getElementById("logbox").textContent=await (await fetch("/api/log")).text();
+}
+async function refreshLog(){
+  try{document.getElementById("logbox").textContent=(await (await fetch("/api/log")).text())||"还没有日志"}catch(e){}
+  try{const st=await (await fetch("/api/pull-status")).json(); if(st.result) toast(st.result);}catch(e){}
+}
+async function manualRefresh(btn){
+  btn.disabled=true; const old=btn.textContent; btn.textContent="检测中…";
+  toast("正在检测设备在线状态…", true);
+  try{
+    const text=await (await fetch("/api/devices-refresh",{method:"POST"})).text();
+    if(!/^\[/.test(text)) throw text;
+    const live=JSON.parse(text);
+    window.liveDevices=live;
+    const options=live.map(d=>`<option value="${esc(d.address)}">${esc(d.name||d.ip)} ${d.online?"在线":"不在线"}</option>`).join("");
+    ["shellDevice","appDevice","procDevice","cacheDevice"].forEach(id=>{const box=document.getElementById(id); const oldv=box.value; box.innerHTML=options; if(oldv) box.value=oldv;});
+    document.getElementById("live").innerHTML=live.map(deviceCard).join("")||'<p class="muted">保存设备后这里显示是否在线</p>';
+    const on=live.filter(d=>d.online).length;
+    toast(`检测完成：${on} 在线 / ${live.length} 台`, true);
+  }catch(e){ toast("检测失败："+e, false); }
+  btn.disabled=false; btn.textContent=old;
 }
 function gb(kb){return kb? (kb/1048576).toFixed(1)+" GB" : ""}
 function uptimeText(sec){
@@ -356,8 +428,8 @@ function deviceCard(d){
   const disk=d.disk_total? `${gb(d.disk_used)} / ${gb(d.disk_total)}` : "";
   const rows=[
     ["型号", d.model],
-    ["安卓", d.android? `Android ${d.android}` : ""],
-    ["CPU", d.abi],
+    ["安卓版本", (d.android? `Android ${d.android}` : "—") + (d.abi? ` · ${d.abi}` : "")],
+    ["CPU", (d.soc || "—") + (d.cores? ` · ${d.cores}` : "")],
     ["内存", mem],
     ["存储", disk],
     ["已开机", d.uptime? uptimeText(d.uptime): ""]
@@ -388,17 +460,29 @@ async function loadPackages(kind){
   window.pkgKind=kind;
   const address=currentAddress();
   if(!address){toast("没有设备");return}
-  document.getElementById("pkgList").innerHTML='<p class="muted">正在读取…</p>';
-  const data=await (await fetch("/api/packages?address="+encodeURIComponent(address)+"&kind="+kind)).json();
-  packageOffline=!!data.offline;
-  packageRows=Array.isArray(data)?data:(data.rows||[]);
+  const list=document.getElementById("pkgList");
+  list.innerHTML='<p class="muted">正在读取…</p>';
+  // 先秒出：只取包名+版本，不等应用名
+  const quick=await (await fetch("/api/packages?address="+encodeURIComponent(address)+"&kind="+kind+"&labels=0")).json();
+  packageOffline=!!quick.offline;
+  packageRows=Array.isArray(quick)?quick:(quick.rows||[]);
   renderPackages();
+  if(packageOffline) return;
+  // 再补应用名（较慢，异步替换，不阻塞）
+  window.pkgSeq=(window.pkgSeq||0)+1;
+  const seq=window.pkgSeq;
+  try{
+    const full=await (await fetch("/api/packages?address="+encodeURIComponent(address)+"&kind="+kind)).json();
+    if(seq!==window.pkgSeq) return;   // 期间切了设备/分类，丢弃过期结果
+    packageRows=Array.isArray(full)?full:(full.rows||[]);
+    renderPackages();
+  }catch(e){}
 }
 function renderProcesses(){
   if(processOffline){document.getElementById("procBox").innerHTML='<p class="muted">不在线</p>';return}
   const q=(document.getElementById("procQuery").value||"").trim().toLowerCase();
-  const rows=processRows.filter(r=>!q || r.name.toLowerCase().includes(q) || r.user.toLowerCase().includes(q));
-  document.getElementById("procBox").innerHTML=rows.map(r=>`<div class="procrow"><span class="mem">${(r.rss/1024).toFixed(1)} MB</span><span class="muted">${esc(r.pid)}</span><span class="pkg">${esc(r.name)}</span><button class="bad" data-kill="${attr(r.pid)}" data-name="${attr(r.name)}">停止</button></div>`).join("")||'<p class="muted">没有匹配的进程</p>';
+  const rows=processRows.filter(r=>!q || r.name.toLowerCase().includes(q) || (r.label||"").toLowerCase().includes(q) || r.user.toLowerCase().includes(q));
+  document.getElementById("procBox").innerHTML=rows.map(r=>`<div class="procrow"><span class="mem">${(r.rss/1024).toFixed(1)} MB</span><span class="muted">${esc(r.pid)}</span><span class="procname">${esc(r.label||r.name)}</span><span class="procpkg">${esc(r.label?r.name:"")}</span><button class="bad" data-kill="${attr(r.pid)}" data-name="${attr(r.name)}">停止</button></div>`).join("")||'<p class="muted">没有匹配的进程</p>';
 }
 async function loadProcesses(){
   const address=document.getElementById("procDevice").value||currentAddress();
@@ -461,6 +545,12 @@ async function cacheAction(action,id){
   toast((names[action]||"操作")+"： "+text, res.ok && !/fail|error|失败/i.test(text));
   if(action==="delete" && res.ok) loadCache();
 }
+function quickCmd(tpl){
+  const isReboot=tpl==='reboot';
+  if(isReboot && !confirm('确定重启这台设备？')) return;
+  shellCmd.value = isReboot ? 'reboot' : tpl;
+  runShell();
+}
 async function runShell(){
   const address=currentAddress();
   const command=shellCmd.value.trim();
@@ -485,7 +575,11 @@ async function pullNow(){
     refreshLive();
   },1500);
 }
-loadOnce().then(refreshLive);
+restorePane();
+loadOnce().then(refreshLog);
+refreshLive();
+window.addEventListener("focus",()=>{if(document.getElementById("log").classList.contains("on"))refreshLog()});
+setInterval(()=>{const p=document.getElementById("log"); if(p&&p.classList.contains("on")) refreshLog()},2000);
 let apkFiles=[];
 function openApk(){
   apkFiles=[];
