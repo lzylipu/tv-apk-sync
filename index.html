@@ -133,6 +133,12 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
   main{padding:12px 10px}
   #procbar{grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) auto;gap:6px}
   #procbar select,#procbar input{max-width:none;width:100%;min-width:0}
+  .procrow{display:grid;grid-template-areas:"mem pid name name" "pkg pkg pkg btn";grid-template-columns:84px 62px 1fr auto;gap:4px 8px;align-items:center;padding:8px 10px}
+  .procrow .mem{grid-area:mem}
+  .procrow .muted{grid-area:pid}
+  .procrow .procname{grid-area:name}
+  .procrow .procpkg{grid-area:pkg;color:var(--muted)}
+  .procrow button{grid-area:btn;justify-self:end}
 
   /* 应用卡：上行信息、下行操作按钮 */
   .appcard{flex-direction:column;align-items:stretch;gap:8px}
