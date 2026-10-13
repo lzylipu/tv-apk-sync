@@ -14,6 +14,7 @@ aside{margin:12px;padding:16px 12px;border-radius:22px;background:var(--glass);b
 .brand{display:flex;gap:10px;align-items:center;margin:0 0 16px}
 .brand>div{flex:1;min-width:0}
 .brand .theme{flex:none}
+nav button .m{display:none}
 .mark{width:36px;height:36px;border-radius:12px;object-fit:cover;display:block}
 .brand h1{font-size:16px;margin:0}.brand p{margin:0;color:var(--muted);font-size:12px}
 nav{display:flex;flex-direction:column;gap:2px}
@@ -125,6 +126,8 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
   nav button{flex:1 1 0;min-width:0;width:auto;height:100%;flex-direction:column;justify-content:center;gap:0;padding:0 1px;text-align:center;line-height:1.1}
   nav button svg{display:none}
   nav button span{font-size:13px;white-space:normal;word-break:break-all;text-align:center;max-width:100%}
+  nav button span.d{display:none}
+  nav button span.m{display:inline}
   main{padding:12px 10px}
 }
 </style>
@@ -138,7 +141,7 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
     <button data-pane="cache" onclick="show('cache',this)"><svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4v10l-8 4-8-4z"/><path d="M12 11V3M4 7l8 4 8-4"/></svg><span>本地包</span></button>
     <hr>
     <button data-pane="status" onclick="show('status',this)"><svg viewBox="0 0 24 24"><path d="M4 16h3v4H4zM10 10h3v10h-3zM16 6h3v14h-3z"/></svg><span>状态</span></button>
-    <button data-pane="installed" onclick="show('installed',this)"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8v2H8zM8 12h8v2H8z"/></svg><span>已装应用</span></button>
+    <button data-pane="installed" onclick="show('installed',this)"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8v2H8zM8 12h8v2H8z"/></svg><span class="d">已装应用</span><span class="m">应用</span></button>
     <button data-pane="proc" onclick="show('proc',this)"><svg viewBox="0 0 24 24"><path d="M9 3h6v3h3v3h3v6h-3v3h-3v3H9v-3H6v-3H3V9h3V6h3z"/></svg><span>进程</span></button>
     <hr>
     <button data-pane="notify" onclick="show('notify',this)"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6z"/><path d="M10 19a2 2 0 0 0 4 0z"/></svg><span>通知</span></button>
