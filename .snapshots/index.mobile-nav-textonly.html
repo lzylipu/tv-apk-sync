@@ -1,0 +1,653 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>电视装包</title>
+<link rel="icon" href="/favicon.png">
+<style>
+:root{color-scheme:light;--ink:#1d1d1f;--muted:rgba(60,60,67,.65);--line:rgba(255,255,255,.55);--accent:#4299e1;--accent-ink:#fff;--ok:#34c759;--bad:#ff3b30;--warn:#ff9f0a;--glass:rgba(255,255,255,.46);--fill:rgba(255,255,255,.34);--field:rgba(255,255,255,.62);--stage:#edf2f7;--glow:linear-gradient(140deg,#a0aec0 0%,#cbd5e0 45%,#edf2f7 100%)}
+:root[data-theme="dark"]{color-scheme:dark;--ink:#f5f5f7;--muted:rgba(235,235,245,.62);--line:rgba(255,255,255,.12);--accent:#4299e1;--accent-ink:#fff;--glass:rgba(18,22,28,.55);--fill:rgba(255,255,255,.06);--field:rgba(0,0,0,.28);--stage:#0b1220;--glow:linear-gradient(140deg,#1a365d 0%,#2a4365 45%,#1a202c 100%)}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Noto Sans SC",sans-serif;background:var(--stage);min-height:100vh}
+.stage{position:fixed;inset:0;z-index:-1;background:var(--glow)}
+.shell{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+aside{margin:12px;padding:16px 12px;border-radius:22px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(28px) saturate(160%);box-shadow:0 24px 64px -16px rgba(0,0,0,.28)}
+.brand{display:flex;gap:10px;align-items:center;margin:0 0 16px}
+.brand>div{flex:1;min-width:0}
+.brand .theme{flex:none}
+.mark{width:36px;height:36px;border-radius:12px;object-fit:cover;display:block}
+.brand h1{font-size:16px;margin:0}.brand p{margin:0;color:var(--muted);font-size:12px}
+nav{display:flex;flex-direction:column;gap:2px}
+nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;color:var(--ink);border:0;border-radius:10px;padding:9px 10px;margin:0;cursor:pointer}
+nav button svg{width:18px;height:18px;flex:none;fill:currentColor;opacity:.72}
+nav button.on{background:var(--accent);color:#fff}
+nav button.on svg{opacity:1}
+nav hr{border:0;border-top:1px solid var(--line);margin:6px 8px}
+main{padding:12px 16px 16px 4px}
+.topbar{display:flex;justify-content:flex-end;margin:0 0 10px}
+.theme{width:36px;height:36px;border-radius:50%;padding:0;display:grid;place-items:center}
+.theme svg{width:18px;height:18px;fill:currentColor}
+.theme .sun{display:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+:root[data-theme="dark"] .theme .moon{display:none}
+:root[data-theme="dark"] .theme .sun{display:block}
+.theme .sun circle{fill:currentColor;stroke:none}
+.pane{display:none;background:var(--glass);border:1px solid var(--line);border-radius:22px;padding:18px;backdrop-filter:blur(28px) saturate(160%);box-shadow:0 24px 64px -16px rgba(0,0,0,.22)}
+.pane.on{display:block}
+.pane-tall{flex-direction:column;min-height:calc(100vh - 96px)}
+.pane-tall.on{display:flex}
+.pane-tall #shellOut{flex:1 1 auto;overflow:auto}
+
+h2{margin:0 0 6px;font-size:18px}.hint{color:var(--muted);margin:0 0 16px}
+.row{display:grid;grid-template-columns:1fr 1.3fr .5fr auto;gap:8px;align-items:end;margin:0 0 8px}
+.app-row{grid-template-columns:1fr 3fr auto}
+label{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}
+input,select{width:100%;border:1px solid var(--line);border-radius:12px;padding:9px 10px;font:inherit;background:var(--field);color:var(--ink)}
+button{border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:var(--fill);color:var(--ink);font:inherit;cursor:pointer}
+button:hover{background:var(--field)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button.ghost{background:var(--fill);color:var(--ink)}button.warn{background:rgba(255,159,10,.16);border-color:rgba(255,159,10,.35);color:#c93400}button.bad{background:rgba(255,59,48,.14);border-color:rgba(255,59,48,.32);color:#ff3b30}
+.mask{position:fixed;inset:0;background:rgba(15,23,42,.38);display:none;place-items:center;z-index:20}
+.mask.on{display:grid}
+.dialog{width:min(560px,calc(100vw - 32px));background:var(--glass);border:1px solid var(--line);border-radius:22px;padding:18px;backdrop-filter:blur(28px) saturate(160%);box-shadow:0 24px 64px -16px rgba(0,0,0,.28)}
+.dialog h3{margin:0}.dialog .hint{margin:4px 0 14px}
+.drop{border:1px dashed var(--line);border-radius:16px;min-height:180px;display:grid;place-items:center;text-align:center;padding:18px;background:var(--fill);cursor:pointer}
+.drop.on{border-color:var(--accent);background:rgba(66,153,225,.12)}
+.drop strong{display:block}.pick{margin:10px 0 0;text-align:left}
+.pick li{margin:4px 0;word-break:break-all}
+.dialog .actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+:root[data-theme="dark"] button.warn{color:#ffd60a}:root[data-theme="dark"] button.bad{color:#ff6961}
+.actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+.card{border:1px solid var(--line);border-radius:16px;padding:12px;margin:0 0 8px;background:var(--fill)}
+.facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}
+.facts div{background:var(--field);border-radius:12px;padding:8px 10px;min-width:0}
+.facts b{display:block;color:var(--muted);font-size:12px;font-weight:500}
+.facts span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.muted{color:var(--muted)}
+pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:16px;padding:12px;min-height:160px;margin:0}
+.toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:40;min-width:220px;max-width:min(560px,calc(100vw - 32px));background:#fff;color:#1d1d1f;border:1px solid rgba(0,0,0,.08);border-radius:14px;padding:12px 16px;display:none;box-shadow:0 16px 40px -12px rgba(0,0,0,.35);font-weight:600}
+.toast.ok{background:#34c759;color:#fff;border-color:#248a3d}
+.toast.bad{background:#ff3b30;color:#fff;border-color:#d70015}
+.toolbar{display:flex;gap:8px;align-items:center;margin:0 0 12px;flex-wrap:wrap}
+.toolbar input{max-width:280px}
+#pkgbar{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,2fr) auto auto;gap:8px;align-items:center}
+#pkgbar input{max-width:none}
+#procbar{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,2fr) auto;gap:8px;align-items:center}
+#procbar select,#procbar input{max-width:none}
+#shellbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto;gap:8px;align-items:center;margin:0 0 12px}
+#cachebar{display:flex;gap:8px;align-items:center;margin:0 0 12px}
+#cachebar select{width:280px;max-width:60vw}
+#shellbar select,#shellbar input{max-width:none}
+#shellOut{min-height:72px;padding:10px 12px;font-size:13px;line-height:1.5;margin-bottom:0}
+.cmdhint{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);grid-column:1/-1}
+.cmdhint a{color:var(--accent);text-decoration:none;padding:2px 6px;border:1px solid var(--line);border-radius:8px;background:var(--fill);cursor:pointer}
+.cmdhint a:hover{background:var(--field)}
+.tree{display:flex;flex-direction:column;gap:12px}
+.source{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--fill)}
+.source h3{margin:0;padding:12px 14px;background:transparent;font-size:16px}
+.source .meta{padding:0 14px 10px;color:var(--muted);font-size:12px;word-break:break-all}
+.file{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.file .muted,.file .pkg{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(min-width:761px){
+  html,body{height:100%;overflow:hidden}
+  .shell{height:100vh}
+  aside{position:sticky;top:12px;align-self:start;height:calc(100vh - 24px);overflow-y:auto}
+  main{height:100vh;overflow-y:auto}
+}
+.appcard{border:1px solid var(--line);border-radius:16px;padding:10px 12px;background:var(--fill);display:flex;flex-direction:row;align-items:center;gap:12px}
+.appcard>div:first-child{flex:1;min-width:0;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,2fr) minmax(0,6fr);gap:10px;align-items:baseline}
+.appcard>div:first-child>*{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.appcard>div:first-child b{font-size:15px}
+.appcard>div:first-child .muted{font-size:12px}
+.appcard>div:first-child .pkg{font-size:12px}
+.appcard b{font-size:15px}.pkg{font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);word-break:break-all}
+.appcard .ops{flex-wrap:wrap}
+.ops{display:flex;gap:6px;flex-wrap:nowrap;flex:none}
+.ops button,.ops a{padding:6px 9px;font-size:13px;white-space:nowrap}
+.ops a{background:var(--fill);color:var(--ink);border:1px solid var(--line)}
+.proclist{display:flex;flex-direction:column;gap:6px;max-height:68vh;overflow:auto}
+.procrow{display:grid;grid-template-columns:84px 62px minmax(0,0.7fr) minmax(0,2.5fr) auto;gap:8px;align-items:center;border:1px solid var(--line);border-radius:14px;padding:8px 10px;background:var(--fill)}
+.procname{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:650}
+.procpkg{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;color:var(--muted)}
+.procrow button{padding:6px 9px;font-size:13px;white-space:nowrap;flex:none}
+.mem{font-variant-numeric:tabular-nums;font-weight:650;font-size:13px}
+.procrow .muted{font-size:13px}
+@media(max-width:760px){#pkgbar,#procbar,#shellbar,#cachebar{grid-template-columns:1fr 1fr}.shell{grid-template-columns:1fr}aside{margin:8px}.row,.app-row,.procrow{grid-template-columns:1fr}.facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){
+  aside{margin:8px;padding:10px 8px;position:static;height:auto;overflow:visible}
+  aside .brand{margin:0 0 8px}
+  aside .brand p{display:none}
+  aside .brand h1{font-size:14px}
+  nav{flex-direction:row;flex-wrap:nowrap;gap:2px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  nav hr{display:none}
+  nav button{flex:1 1 0;min-width:0;width:auto;flex-direction:column;justify-content:center;gap:0;padding:8px 1px;text-align:center;line-height:1.1;min-height:40px}
+  nav button svg{display:none}
+  nav button span{font-size:13px;white-space:normal;word-break:break-all;text-align:center;max-width:100%}
+  main{padding:12px 10px}
+}
+</style>
+<div class="stage"></div>
+<div class="shell">
+<aside>
+  <div class="brand"><img class="mark" src="/logo.png" alt="电视装包"><div><h1>电视装包</h1><p>连接、装包、看进程</p></div><button class="theme" id="themeBtn" onclick="toggleTheme()" title="明暗" aria-label="明暗"><svg class="moon" viewBox="0 0 24 24"><path d="M15 3a9 9 0 1 0 6 15 7 7 0 0 1-6-15z"/></svg><svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></button></div>
+  <nav>
+    <button class="on" data-pane="devices" onclick="show('devices',this)"><svg viewBox="0 0 24 24"><path d="M4 6h16v10H4z"/><path d="M8 20h8v-2H8z"/></svg><span>设备</span></button>
+    <button data-pane="apps" onclick="show('apps',this)"><svg viewBox="0 0 24 24"><path d="M6 4h5v5H6zM13 4h5v5h-5zM6 11h5v5H6zM13 11h5v5h-5z"/></svg><span>软件</span></button>
+    <button data-pane="cache" onclick="show('cache',this)"><svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4v10l-8 4-8-4z"/><path d="M12 11V3M4 7l8 4 8-4"/></svg><span>本地包</span></button>
+    <hr>
+    <button data-pane="status" onclick="show('status',this)"><svg viewBox="0 0 24 24"><path d="M4 16h3v4H4zM10 10h3v10h-3zM16 6h3v14h-3z"/></svg><span>状态</span></button>
+    <button data-pane="installed" onclick="show('installed',this)"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8v2H8zM8 12h8v2H8z"/></svg><span>已装应用</span></button>
+    <button data-pane="proc" onclick="show('proc',this)"><svg viewBox="0 0 24 24"><path d="M9 3h6v3h3v3h3v6h-3v3h-3v3H9v-3H6v-3H3V9h3V6h3z"/></svg><span>进程</span></button>
+    <hr>
+    <button data-pane="notify" onclick="show('notify',this)"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6z"/><path d="M10 19a2 2 0 0 0 4 0z"/></svg><span>通知</span></button>
+    <button data-pane="log" onclick="show('log',this)"><svg viewBox="0 0 24 24"><path d="M6 3h9l5 5v13H6z"/><path d="M8 11h8v2H8zM8 15h8v2H8z"/></svg><span>日志</span></button>
+    <button data-pane="shell" onclick="show('shell',this)"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M7 9l3 3-3 3M12 15h5v2h-5z"/></svg><span>命令行</span></button>
+  </nav>
+</aside>
+<main>
+  <section id="devices" class="pane on">
+    <h2>设备</h2>
+    <p class="hint">填电视或投影仪的局域网 IP。端口默认 5555。这里的内容不会被自动刷新清掉。</p>
+    <div id="deviceList"></div>
+    <button class="ghost" onclick="addDevice()">添加设备</button>
+    <div class="actions"><button class="primary" onclick="save()">保存</button></div>
+  </section>
+  <section id="apps" class="pane">
+    <h2>软件</h2>
+    <p class="hint">填 GitHub 仓库、仓库网址，或 APK 直链。不用填包名。定时扫描最新版，设备在线才安装。</p>
+    <div id="appList"></div>
+    <div class="actions" style="margin:0 0 8px"><button class="ghost" onclick="addApp()">添加软件</button><button class="ghost" onclick="openApk()">导入 APK</button></div>
+    <div class="actions"><button class="primary" onclick="save()">保存</button><button class="ghost" onclick="pullNow()">现在拉一次包</button></div>
+  </section>
+  <section id="notify" class="pane">
+    <h2>通知</h2>
+    <p class="hint">三个填一个就行。安装失败或有新包时才发。</p>
+    <p><label>飞书机器人</label><input id="feishu" placeholder="https://open.feishu.cn/open-apis/bot/v2/hook/..."></p>
+    <p><label>PushPlus</label><input id="pushplus" placeholder="token"></p>
+    <p><label>Bark</label><input id="bark" placeholder="https://api.day.app/你的key"></p>
+    <p><label>查版本间隔（小时）</label><input id="pull" type="number" min="1" value="24"></p>
+    <p><label>设备检测（分钟）</label><input id="install" type="number" min="1" value="10"></p>
+    <div class="actions"><button class="primary" onclick="save()">保存</button><button class="ghost" onclick="testNotify()">发一条测试</button><button class="ghost" onclick="exportConfig()">导出配置</button><button class="ghost" onclick="document.getElementById('importFile').click()">导入配置</button><input id="importFile" type="file" accept=".yaml,.yml,application/yaml,application/json" hidden onchange="importConfig(this)"></div>
+  </section>
+  <section id="status" class="pane">
+    <h2>状态 <button class="ghost" id="liveRefresh" onclick="manualRefresh(this)" style="font-size:13px;padding:5px 12px;vertical-align:middle;margin-left:8px">刷新</button></h2>
+    <p class="hint">只刷新这一块。间隔在通知里配置。</p>
+    <div id="live"><p class="muted">正在读取设备…</p></div>
+  </section>
+  <section id="log" class="pane">
+    <h2>日志</h2>
+    <p class="hint">只显示最近 50 条，最新的在最上面。</p>
+    <pre id="logbox">还没有日志</pre>
+  </section>
+  <section id="cache" class="pane">
+    <h2>本地包</h2>
+    <p class="hint">按你填的名称和链接拉下来的 APK 在这里。点推送就装到选中的设备，下载是把文件存到这台电脑，删除只删缓存，不卸电视上的应用。</p>
+    <div class="toolbar" id="cachebar">
+      <select id="cacheDevice"></select>
+      <button class="ghost" onclick="loadCache()">刷新</button>
+    </div>
+    <div id="cacheList" class="tree"><p class="muted">还没有缓存包</p></div>
+  </section>
+  <section id="installed" class="pane">
+    <h2>已装应用</h2>
+    <p class="hint">自己安装的和系统应用分开。清缓存不动账号数据。清除数据会退出登录。卸载系统应用只对当前用户生效，可以再启用。</p>
+    <div class="toolbar" id="pkgbar">
+      <select id="appDevice"></select>
+      <input id="appQuery" placeholder="搜名称或包名" oninput="renderPackages()">
+      <button class="ghost" onclick="loadPackages('user')">用户应用</button>
+      <button class="ghost" onclick="loadPackages('system')">系统应用</button>
+    </div>
+    <div id="pkgList" class="appgrid"><p class="muted">先选一台在线设备</p></div>
+  </section>
+  <section id="proc" class="pane">
+    <h2>进程</h2>
+    <p class="hint">按内存从大到小排。上面的就是占得最多的，可以停止。系统底层进程停不掉会提示。</p>
+    <div class="toolbar" id="procbar">
+      <select id="procDevice"></select>
+      <input id="procQuery" placeholder="搜进程名" oninput="renderProcesses()">
+      <button class="ghost" onclick="loadProcesses()">刷新进程</button>
+    </div>
+    <div id="procBox" class="proclist"><p class="muted">还没读取</p></div>
+  </section>
+  <section id="shell" class="pane pane-tall">
+    <h2>命令行</h2>
+    <p class="hint">只填 shell 后面的内容，不要再写 adb。例如 pm list packages。</p>
+    <div class="toolbar" id="shellbar">
+      <select id="shellDevice"></select>
+      <input id="shellCmd" placeholder="pm list packages -3">
+      <div class="cmdhint">
+        <span>常用：</span>
+        <a href="javascript:void(0)" onclick="quickCmd('reboot')">重启</a>
+        <a href="javascript:void(0)" onclick="quickCmd('_pm list packages -3')">三方应用</a>
+        <a href="javascript:void(0)" onclick="quickCmd('getprop ro.build.version.release')">系统版本</a>
+        <a href="javascript:void(0)" onclick="quickCmd('df -h /data')">存储</a>
+        <a href="javascript:void(0)" onclick="quickCmd('cat /proc/meminfo | head -3')">内存</a>
+        <a href="javascript:void(0)" onclick="quickCmd('top -n 1 | head -10')">CPU</a>
+      </div>
+      <button onclick="runShell()">执行</button>
+    </div>
+    <pre id="shellOut">还没有结果</pre>
+  </section>
+</main>
+</div>
+<div id="apkMask" class="mask">
+  <div class="dialog" role="dialog" aria-label="导入 APK">
+    <h3>导入 APK</h3>
+    <p class="hint">可以一次拖进多个。上传后按包名加到软件列表，还要再点保存。</p>
+    <div id="apkDrop" class="drop">
+      <div><strong>把 APK 拖到这里，或点击选择</strong><span class="hint">只接收 .apk</span><ul id="apkPick" class="pick"></ul></div>
+      <input id="apkFile" type="file" accept=".apk,application/vnd.android.package-archive" multiple hidden>
+    </div>
+    <div class="actions"><button class="ghost" onclick="closeApk()">取消</button><button class="primary" id="apkUpload" onclick="uploadApk()" disabled>上传</button></div>
+  </div>
+</div>
+<div id="toast" class="toast"></div>
+<script>
+function applyTheme(theme){
+  document.documentElement.dataset.theme=theme;
+  localStorage.setItem("tv-theme", theme);
+}
+function toggleTheme(){applyTheme(document.documentElement.dataset.theme==="dark"?"light":"dark")}
+applyTheme(localStorage.getItem("tv-theme")||"light");
+let cfg={devices:[],apps:[],notify:{},pull_hours:24,install_minutes:10};
+let loaded=false;
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+const attr=s=>encodeURIComponent(String(s??""));
+function show(id,btn){
+  document.querySelectorAll(".pane").forEach(el=>el.classList.toggle("on",el.id===id));
+  document.querySelectorAll("nav button").forEach(el=>el.classList.toggle("on",el===btn));
+  try{localStorage.setItem("tvPane",id)}catch(e){}
+  if(id==="cache") loadCache();
+  if(id==="log") refreshLog();
+}
+function restorePane(){
+  let id="";
+  try{id=localStorage.getItem("tvPane")||""}catch(e){}
+  if(!id) return;
+  const btn=document.querySelector(`nav button[data-pane="${id}"]`);
+  if(btn) show(id,btn);
+}
+function field(obj,key){return `<input data-k="${key}" value="${esc(obj[key]??"")}">`}
+function paintForms(){
+  deviceList.innerHTML=cfg.devices.map((d,i)=>`<div class="row"><div><label>名称</label>${field(d,"name")}</div><div><label>IP</label>${field(d,"ip")}</div><div><label>端口</label>${field(d,"port")}</div><button class="bad" onclick="removeDevice(${i})">删除</button></div>`).join("")||'<p class="muted">还没有设备</p>';
+  appList.innerHTML=cfg.apps.map((d,i)=>`<div class="row app-row"><div><label>名称，可空</label>${field(d,"name")}</div><div><label>GitHub 或 APK 直链</label>${field(d,"source")}</div><button class="bad" onclick="removeApp(${i})">删除</button></div>`).join("")||'<p class="muted">还没有软件</p>';
+  document.querySelectorAll("[data-k]").forEach(el=>el.oninput=collect);
+}
+function collect(){
+  const rows=[...document.querySelectorAll("#deviceList .row")];
+  cfg.devices=rows.map(row=>{
+    const o={};
+    [...row.querySelectorAll("[data-k]")].forEach(el=>o[el.dataset.k]=el.value);
+    return o;
+  });
+  const arows=[...document.querySelectorAll("#appList .row")];
+  cfg.apps=arows.map(row=>{
+    const o={};
+    [...row.querySelectorAll("[data-k]")].forEach(el=>o[el.dataset.k]=el.value);
+    return o;
+  });
+  cfg.notify={feishu:feishu.value.trim(),pushplus:pushplus.value.trim(),bark:bark.value.trim()};
+  cfg.pull_hours=+pull.value||24;
+  cfg.install_minutes=+install.value||10;
+}
+function addDevice(){collect();cfg.devices.push({name:"电视",ip:"",port:5555});paintForms()}
+function addApp(){collect();cfg.apps.push({name:"",source:""});paintForms()}
+function removeDevice(i){collect();cfg.devices.splice(i,1);paintForms()}
+function removeApp(i){collect();cfg.apps.splice(i,1);paintForms()}
+function exportConfig(){
+  const a=document.createElement("a");
+  a.href="/api/config.yaml";
+  a.download="config.yaml";
+  a.click();
+}
+function importConfig(input){
+  const file=input.files&&input.files[0];
+  input.value="";
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const text=String(reader.result||"");
+    let data;
+    try{
+      data=text.trim().startsWith("{") ? JSON.parse(text) : parseYaml(text);
+    }catch(e){toast("不是配置文件");return}
+    if(!Array.isArray(data.devices)||!Array.isArray(data.apps)){toast("配置里没有设备和软件");return}
+    cfg.devices=data.devices.map(d=>({name:d.name||"",ip:d.ip||"",port:d.port||5555}));
+    cfg.apps=data.apps.map(d=>({name:d.name||"",source:d.source||d.repo||""}));
+    if(data.notify&&typeof data.notify==="object"){
+      cfg.notify={feishu:data.notify.feishu||"",pushplus:data.notify.pushplus||"",bark:data.notify.bark||""};
+      feishu.value=cfg.notify.feishu;
+      pushplus.value=cfg.notify.pushplus;
+      bark.value=cfg.notify.bark;
+    }
+    if(data.pull_hours){cfg.pull_hours=+data.pull_hours;pull.value=cfg.pull_hours}
+    if(data.install_minutes){cfg.install_minutes=+data.install_minutes;install.value=cfg.install_minutes}
+    paintForms();
+    toast("已导入，还没保存");
+  };
+  reader.readAsText(file);
+}
+function parseYaml(text){
+  const data={devices:[],apps:[],notify:{}};
+  let section="", current=null;
+  const unquote=value=>{
+    value=value.trim();
+    if(value.startsWith('"')&&value.endsWith('"')) return JSON.parse(value);
+    if(value.startsWith("'")&&value.endsWith("'")) return value.slice(1,-1);
+    return value;
+  };
+  text.split(/\r?\n/).forEach(raw=>{
+    if(!raw.trim()||raw.trim().startsWith("#")) return;
+    if(!raw.startsWith(" ")){
+      const cut=raw.indexOf(":");
+      section=raw.slice(0,cut).trim();
+      current=null;
+      if(section==="pull_hours"||section==="install_minutes") data[section]=+raw.slice(cut+1).trim()||0;
+      return;
+    }
+    const body=raw.trim();
+    if(body==="[]") return;
+    const item=body.startsWith("- ")?body.slice(2):body;
+    const cut=item.indexOf(":");
+    const key=item.slice(0,cut).trim();
+    let value=unquote(item.slice(cut+1));
+    if((section==="devices"||section==="apps")&&body.startsWith("- ")){
+      current={};
+      data[section].push(current);
+    }
+    if(section==="notify") data.notify[key]=value;
+    else if(current){
+      if(key==="port") value=+value||5555;
+      current[key]=value;
+    }
+  });
+  return data;
+}
+function toast(text, ok){
+  const el=document.getElementById("toast");
+  const raw=String(text??"").trim();
+  const fail=/失败|错误|不在线|没有|不是|找不到|Exception|Error|error|FAIL|denied|offline/i.test(raw);
+  const good=ok===true || (ok!==false && !fail);
+  el.textContent=(good?"成功：":"失败：")+raw;
+  el.className="toast "+(good?"ok":"bad");
+  el.style.display="block";
+  clearTimeout(window.toastTimer);
+  window.toastTimer=setTimeout(()=>el.style.display="none", 4000);
+}
+async function save(){
+  collect();
+  const res=await fetch("/api/config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(cfg)});
+  if(!res.ok){toast(await res.text());return}
+  toast("已保存");
+  armRefresh();
+  refreshLive();
+}
+async function loadOnce(){
+  cfg=await (await fetch("/api/config")).json();
+  cfg.notify=cfg.notify||{};
+  cfg.apps=(cfg.apps||[]).map(item=>({name:item.name||"",source:item.source||item.repo||""}));
+  feishu.value=cfg.notify.feishu||"";
+  pushplus.value=cfg.notify.pushplus||"";
+  bark.value=cfg.notify.bark||"";
+  pull.value=cfg.pull_hours||24;
+  install.value=cfg.install_minutes||10;
+  paintForms();
+  loaded=true;
+}
+async function refreshLive(){
+  const box=document.getElementById("live");
+  if(box && /正在读取|保存设备后/.test(box.textContent)) box.innerHTML='<p class="muted">正在检测设备在线状态…</p>';
+  const live=await (await fetch("/api/devices")).json();
+  window.liveDevices=live;
+  const sel=document.getElementById("shellDevice");
+  const prev=sel.value;
+  const options=live.map(d=>`<option value="${esc(d.address)}">${esc(d.name||d.ip)} ${d.online?"在线":"不在线"}</option>`).join("");
+  ["shellDevice","appDevice","procDevice","cacheDevice"].forEach(id=>{
+    const box=document.getElementById(id);
+    const old=box.value;
+    box.innerHTML=options;
+    if(old) box.value=old;
+  });
+  if(prev) sel.value=prev;
+  document.getElementById("live").innerHTML=live.map(deviceCard).join("")||'<p class="muted">保存设备后这里显示是否在线</p>';
+}
+async function refreshLog(){
+  try{document.getElementById("logbox").textContent=(await (await fetch("/api/log")).text())||"还没有日志"}catch(e){}
+  try{const st=await (await fetch("/api/pull-status")).json(); if(st.result) toast(st.result);}catch(e){}
+}
+async function manualRefresh(btn){
+  btn.disabled=true; const old=btn.textContent; btn.textContent="检测中…";
+  toast("正在检测设备在线状态…", true);
+  try{
+    const text=await (await fetch("/api/devices-refresh",{method:"POST"})).text();
+    if(!/^\[/.test(text)) throw text;
+    const live=JSON.parse(text);
+    window.liveDevices=live;
+    const options=live.map(d=>`<option value="${esc(d.address)}">${esc(d.name||d.ip)} ${d.online?"在线":"不在线"}</option>`).join("");
+    ["shellDevice","appDevice","procDevice","cacheDevice"].forEach(id=>{const box=document.getElementById(id); const oldv=box.value; box.innerHTML=options; if(oldv) box.value=oldv;});
+    document.getElementById("live").innerHTML=live.map(deviceCard).join("")||'<p class="muted">保存设备后这里显示是否在线</p>';
+    const on=live.filter(d=>d.online).length;
+    toast(`检测完成：${on} 在线 / ${live.length} 台`, true);
+  }catch(e){ toast("检测失败："+e, false); }
+  btn.disabled=false; btn.textContent=old;
+}
+function gb(kb){return kb? (kb/1048576).toFixed(1)+" GB" : ""}
+function uptimeText(sec){
+  sec=+sec||0;
+  const d=Math.floor(sec/86400), h=Math.floor(sec%86400/3600), m=Math.floor(sec%3600/60);
+  return (d?d+" 天 ":"")+(h?h+" 小时 ":"")+m+" 分钟";
+}
+function deviceCard(d){
+  if(!d.online) return `<div class="card"><b>${esc(d.name||d.ip)}</b><br><span class="bad">不在线</span> <span class="muted">${esc(d.detail||"")}</span></div>`;
+  const mem=d.mem_total? `${gb(d.mem_used)} / ${gb(d.mem_total)}` : "";
+  const disk=d.disk_total? `${gb(d.disk_used)} / ${gb(d.disk_total)}` : "";
+  const rows=[
+    ["型号", d.model],
+    ["安卓版本", (d.android? `Android ${d.android}` : "—") + (d.abi? ` · ${d.abi}` : "")],
+    ["CPU", (d.soc || "—") + (d.cores? ` · ${d.cores}` : "")],
+    ["内存", mem],
+    ["存储", disk],
+    ["已开机", d.uptime? uptimeText(d.uptime): ""]
+  ];
+  return `<div class="card"><b>${esc(d.name||d.ip)}</b> <span class="ok">在线</span><div class="facts">${rows.map(item=>`<div><b>${esc(item[0])}</b><span>${esc(item[1]||"—")}</span></div>`).join("")}</div></div>`;
+}
+function currentAddress(){return document.getElementById("appDevice").value || document.getElementById("shellDevice").value}
+let packageRows=[];
+let processRows=[];
+let packageOffline=false;
+let processOffline=false;
+async function appAction(action, pkg){
+  const names={uninstall:"卸载",cache:"清缓存",clear:"清除数据",disable:"停用",enable:"启用",stop:"强停"};
+  if((action==="uninstall"||action==="clear"||action==="disable") && !confirm(`确定${names[action]} ${pkg}？`)) return;
+  toast("正在"+names[action]+"…", true);
+  const res=await fetch("/api/app-action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address:currentAddress(),package:pkg,action})});
+  const text=await res.text();
+  toast(names[action]+"： "+text, res.ok && !/fail|error|失败/i.test(text));
+  if(action==="uninstall" && res.ok) loadPackages(window.pkgKind||"user");
+}
+function renderPackages(){
+  if(packageOffline){document.getElementById("pkgList").innerHTML='<p class="muted">不在线</p>';return}
+  const q=(document.getElementById("appQuery").value||"").trim().toLowerCase();
+  const rows=packageRows.filter(r=>!q || (r.label||"").toLowerCase().includes(q) || r.package.toLowerCase().includes(q));
+  document.getElementById("pkgList").innerHTML=rows.map(r=>`<article class="appcard"><div><b>${esc(r.label||r.package)}</b><div class="muted">${esc(r.version||"没有读到版本")}</div><div class="pkg">${esc(r.package)}</div></div><div class="ops"><button class="ghost" data-act="stop" data-pkg="${attr(r.package)}">强停</button><button class="ghost" data-act="cache" data-pkg="${attr(r.package)}">清缓存</button><button class="warn" data-act="clear" data-pkg="${attr(r.package)}">清数据</button><button class="ghost" data-act="disable" data-pkg="${attr(r.package)}">停用</button><button class="ghost" data-act="enable" data-pkg="${attr(r.package)}">启用</button><button class="bad" data-act="uninstall" data-pkg="${attr(r.package)}">卸载</button></div></article>`).join("")||'<p class="muted">没有匹配的应用</p>';
+}
+async function loadPackages(kind){
+  window.pkgKind=kind;
+  const address=currentAddress();
+  if(!address){toast("没有设备");return}
+  const list=document.getElementById("pkgList");
+  list.innerHTML='<p class="muted">正在读取…</p>';
+  // 先秒出：只取包名+版本，不等应用名
+  const quick=await (await fetch("/api/packages?address="+encodeURIComponent(address)+"&kind="+kind+"&labels=0")).json();
+  packageOffline=!!quick.offline;
+  packageRows=Array.isArray(quick)?quick:(quick.rows||[]);
+  renderPackages();
+  if(packageOffline) return;
+  // 再补应用名（较慢，异步替换，不阻塞）
+  window.pkgSeq=(window.pkgSeq||0)+1;
+  const seq=window.pkgSeq;
+  try{
+    const full=await (await fetch("/api/packages?address="+encodeURIComponent(address)+"&kind="+kind)).json();
+    if(seq!==window.pkgSeq) return;   // 期间切了设备/分类，丢弃过期结果
+    packageRows=Array.isArray(full)?full:(full.rows||[]);
+    renderPackages();
+  }catch(e){}
+}
+function renderProcesses(){
+  if(processOffline){document.getElementById("procBox").innerHTML='<p class="muted">不在线</p>';return}
+  const q=(document.getElementById("procQuery").value||"").trim().toLowerCase();
+  const rows=processRows.filter(r=>!q || r.name.toLowerCase().includes(q) || (r.label||"").toLowerCase().includes(q) || r.user.toLowerCase().includes(q));
+  document.getElementById("procBox").innerHTML=rows.map(r=>`<div class="procrow"><span class="mem">${(r.rss/1024).toFixed(1)} MB</span><span class="muted">${esc(r.pid)}</span><span class="procname">${esc(r.label||r.name)}</span><span class="procpkg">${esc(r.label?r.name:"")}</span><button class="bad" data-kill="${attr(r.pid)}" data-name="${attr(r.name)}">停止</button></div>`).join("")||'<p class="muted">没有匹配的进程</p>';
+}
+async function loadProcesses(){
+  const address=document.getElementById("procDevice").value||currentAddress();
+  if(!address){toast("没有设备");return}
+  document.getElementById("procBox").innerHTML='<p class="muted">正在读取…</p>';
+  const data=await (await fetch("/api/processes?address="+encodeURIComponent(address))).json();
+  processOffline=!!data.offline;
+  processRows=Array.isArray(data)?data:(data.rows||[]);
+  renderProcesses();
+}
+async function killProc(pid,name){
+  if(!confirm(`停止 ${name}？`)) return;
+  toast("正在停止…", true);
+  const res=await fetch("/api/kill",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address:document.getElementById("procDevice").value||currentAddress(),pid,name})});
+  const text=await res.text();
+  toast("停止： "+text, res.ok && !/fail|error|失败/i.test(text));
+  if(res.ok) loadProcesses();
+}
+async function loadCache(){
+  const box=document.getElementById("cacheList");
+  box.innerHTML='<p class="muted">正在读取…</p>';
+  const [rows, conf]=await Promise.all([fetch("/api/cache").then(r=>r.json()), fetch("/api/config").then(r=>r.json())]);
+  const mb=n=>(n/1048576).toFixed(1)+" MB";
+  const groups=new Map();
+  for(const app of (conf.apps||[])){
+    const source=app.source||app.repo||"";
+    if(source.startsWith("file:")){
+      const file=source.slice(5);
+      groups.set(file,{name:app.name||file,source,file,files:[]});
+      continue;
+    }
+    const found=source.match(/github\.com\/([^/\s]+)\/([^/\s#?]+)/);
+    const repo=found && !source.toLowerCase().split("?")[0].includes(".apk") ? `${found[1]}/${found[2].replace(/\.git$/,"")}` : "";
+    const file=(source.split("?")[0].split("/").pop()||"");
+    const key=repo ? repo.replace(/[^A-Za-z0-9._-]+/g,"_").slice(0,80) : source.replace(/[^A-Za-z0-9._-]+/g,"_").slice(0,80);
+    groups.set(key,{name:app.name||file||source,source,file,files:[]});
+  }
+  const used=new Set();
+  for(const row of rows){
+    let hit=null;
+    for(const group of groups.values()){
+      if(group.file && (row.file===group.file || row.id===group.file)) hit=group;
+    }
+    if(!hit){
+      const key=row.folder||row.file;
+      if(!groups.has(key)) groups.set(key,{name:row.label||row.file,source:"",file:row.file,files:[]});
+      hit=groups.get(key);
+    }
+    hit.files.push(row);
+    used.add(row.id);
+  }
+  box.innerHTML=[...groups.values()].map(g=>`<section class="source"><h3>${esc(g.name||"未命名")}</h3><div class="meta">${esc(g.source||"没有填写链接")}</div>${g.files.map(r=>`<div class="file"><div><b>${esc(r.label||r.file)}</b><div class="muted">${esc(r.version||"没读到版本")} · ${mb(r.size)} · ${esc(r.file)}</div><div class="pkg">${esc(r.package||"没读到包名")}</div></div><div class="ops"><button data-cache="push" data-id="${attr(r.id)}">推送</button><a class="ghost" style="padding:6px 9px;border-radius:8px;text-decoration:none" href="/api/cache?id=${encodeURIComponent(r.id)}">下载</a><button class="bad" data-cache="delete" data-id="${attr(r.id)}">删除</button></div></div>`).join("")||'<div class="file"><span class="muted">还没拉到包</span></div>'}</section>`).join("")||'<p class="muted">先在软件里保存名称和链接</p>';
+}
+async function cacheAction(action,id){
+  if(action==="delete" && !confirm("只删缓存里的这个包？")) return;
+  const names={push:"推送",delete:"删除"};
+  toast("正在"+(names[action]||"处理")+"…", true);
+  const res=await fetch("/api/cache-action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,id,address:document.getElementById("cacheDevice").value})});
+  const text=await res.text();
+  toast((names[action]||"操作")+"： "+text, res.ok && !/fail|error|失败/i.test(text));
+  if(action==="delete" && res.ok) loadCache();
+}
+function quickCmd(tpl){
+  const isReboot=tpl==='reboot';
+  if(isReboot && !confirm('确定重启这台设备？')) return;
+  shellCmd.value = isReboot ? 'reboot' : tpl;
+  runShell();
+}
+async function runShell(){
+  const address=currentAddress();
+  const command=shellCmd.value.trim();
+  const res=await fetch("/api/shell",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({address,command})});
+  document.getElementById("shellOut").textContent=await res.text();
+}
+async function testNotify(){await save();toast(await (await fetch("/api/notify-test",{method:"POST"})).text())}
+async function pullNow(){
+  const btn=document.querySelector("button[onclick='pullNow()']");
+  if(btn.disabled) return;
+  btn.disabled=true; btn.textContent="已开始拉取…";
+  const first=await (await fetch("/api/pull",{method:"POST"})).text();
+  toast(first);
+  const timer=setInterval(async()=>{
+    let s;
+    try{ s=await (await fetch("/api/pull-status")).json(); }
+    catch(e){ return; }
+    if(s.running){ btn.textContent="拉取中…"; return; }
+    clearInterval(timer);
+    btn.textContent="现在拉一次包"; btn.disabled=false;
+    if(s.result) toast(s.result);
+    refreshLive();
+  },1500);
+}
+restorePane();
+loadOnce().then(refreshLog);
+refreshLive();
+window.addEventListener("focus",()=>{if(document.getElementById("log").classList.contains("on"))refreshLog()});
+setInterval(()=>{const p=document.getElementById("log"); if(p&&p.classList.contains("on")) refreshLog()},2000);
+let apkFiles=[];
+function openApk(){
+  apkFiles=[];
+  paintApk();
+  document.getElementById("apkMask").classList.add("on");
+}
+function closeApk(){document.getElementById("apkMask").classList.remove("on")}
+function paintApk(){
+  document.getElementById("apkPick").innerHTML=apkFiles.map(file=>`<li>${esc(file.name)}</li>`).join("");
+  const btn=document.getElementById("apkUpload");
+  btn.disabled=!apkFiles.length;
+  btn.textContent=apkFiles.length?`上传 ${apkFiles.length} 个`:"上传";
+}
+function addApkFiles(list){
+  const found=[...list].filter(file=>file.name.toLowerCase().endsWith(".apk"));
+  const names=new Set(apkFiles.map(file=>file.name));
+  found.forEach(file=>{if(!names.has(file.name)){apkFiles.push(file);names.add(file.name)}});
+  if(list.length && !found.length) toast("只接收 APK");
+  paintApk();
+}
+document.getElementById("apkDrop").onclick=event=>{
+  if(event.target.id!=="apkFile") document.getElementById("apkFile").click();
+};
+document.getElementById("apkFile").onchange=event=>{addApkFiles(event.target.files);event.target.value=""};
+["dragenter","dragover"].forEach(name=>document.getElementById("apkDrop").addEventListener(name,event=>{event.preventDefault();document.getElementById("apkDrop").classList.add("on")}));
+["dragleave","drop"].forEach(name=>document.getElementById("apkDrop").addEventListener(name,event=>{event.preventDefault();document.getElementById("apkDrop").classList.remove("on")}));
+document.getElementById("apkDrop").addEventListener("drop",event=>addApkFiles(event.dataTransfer.files));
+async function uploadApk(){
+  if(!apkFiles.length) return;
+  const btn=document.getElementById("apkUpload");
+  btn.disabled=true; btn.textContent="正在上传…";
+  const body=new FormData();
+  apkFiles.forEach(file=>body.append("file", file, file.name));
+  const res=await fetch("/api/upload",{method:"POST",body});
+  const data=await res.json();
+  collect();
+  (data.added||[]).forEach(item=>{
+    if(!cfg.apps.some(app=>(app.source||"")===item.source)) cfg.apps.push({name:item.name||"",source:item.source});
+  });
+  paintForms();
+  closeApk();
+  toast(data.error?`已导入 ${data.added.length} 个，${data.error}`:`已导入 ${data.added.length} 个，还没保存`);
+}
+function armRefresh(){
+  clearInterval(window.refreshTimer);
+  const minutes=Math.max(1, +cfg.install_minutes||10);
+  window.refreshTimer=setInterval(()=>{if(loaded)refreshLive()}, minutes*60000);
+}
+armRefresh();
+document.addEventListener("click", event=>{
+  const act=event.target.closest("[data-act]");
+  if(act){appAction(act.dataset.act, decodeURIComponent(act.dataset.pkg||""));return}
+  const cache=event.target.closest("[data-cache]");
+  if(cache){cacheAction(cache.dataset.cache, decodeURIComponent(cache.dataset.id||""));return}
+  const kill=event.target.closest("[data-kill]");
+  if(kill) killProc(decodeURIComponent(kill.dataset.kill||""), decodeURIComponent(kill.dataset.name||""));
+});
+</script>
