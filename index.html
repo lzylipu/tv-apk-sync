@@ -12,6 +12,8 @@ body{margin:0;color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"S
 .shell{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
 aside{margin:12px;padding:16px 12px;border-radius:22px;background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(28px) saturate(160%);box-shadow:0 24px 64px -16px rgba(0,0,0,.28)}
 .brand{display:flex;gap:10px;align-items:center;margin:0 0 16px}
+.brand>div{flex:1;min-width:0}
+.brand .theme{flex:none}
 .mark{width:36px;height:36px;border-radius:12px;object-fit:cover;display:block}
 .brand h1{font-size:16px;margin:0}.brand p{margin:0;color:var(--muted);font-size:12px}
 nav{display:flex;flex-direction:column;gap:2px}
@@ -125,7 +127,7 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
 <div class="stage"></div>
 <div class="shell">
 <aside>
-  <div class="brand"><img class="mark" src="/logo.png" alt="电视装包"><div><h1>电视装包</h1><p>连接、装包、看进程</p></div></div>
+  <div class="brand"><img class="mark" src="/logo.png" alt="电视装包"><div><h1>电视装包</h1><p>连接、装包、看进程</p></div><button class="theme" id="themeBtn" onclick="toggleTheme()" title="明暗" aria-label="明暗"><svg class="moon" viewBox="0 0 24 24"><path d="M15 3a9 9 0 1 0 6 15 7 7 0 0 1-6-15z"/></svg><svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></button></div>
   <nav>
     <button class="on" data-pane="devices" onclick="show('devices',this)"><svg viewBox="0 0 24 24"><path d="M4 6h16v10H4z"/><path d="M8 20h8v-2H8z"/></svg><span>设备</span></button>
     <button data-pane="apps" onclick="show('apps',this)"><svg viewBox="0 0 24 24"><path d="M6 4h5v5H6zM13 4h5v5h-5zM6 11h5v5H6zM13 11h5v5h-5z"/></svg><span>软件</span></button>
@@ -141,7 +143,6 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
   </nav>
 </aside>
 <main>
-  <div class="topbar"><button class="theme" id="themeBtn" onclick="toggleTheme()" title="明暗" aria-label="明暗"><svg class="moon" viewBox="0 0 24 24"><path d="M15 3a9 9 0 1 0 6 15 7 7 0 0 1-6-15z"/></svg><svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9 17 7M7 17l-2.1 2.1"/></svg></button></div>
   <section id="devices" class="pane on">
     <h2>设备</h2>
     <p class="hint">填电视或投影仪的局域网 IP。端口默认 5555。这里的内容不会被自动刷新清掉。</p>
