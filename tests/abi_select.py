@@ -69,6 +69,34 @@ class PickTests(unittest.TestCase):
         d = app.parse_yaml(y)
         self.assertEqual(d["apps"][0]["min_sdk"], 9)
 
+    def test_save_json_concurrent_safe(self):
+        # 修复: 固定 .tmp 文件名在并发写(once循环 + /api/pull线程)时
+        # 会 tmp.replace 竞争导致 FileNotFoundError。用唯一临时名根治。
+        with tempfile.TemporaryDirectory() as tmp:
+            p = Path(tmp) / "state.json"
+            import threading
+            def w(i):
+                for _ in range(20):
+                    app.save_json(p, {"x": i})
+            ts = [threading.Thread(target=w, args=(i,)) for i in range(4)]
+            [t.start() for t in ts]; [t.join() for t in ts]
+            self.assertTrue(p.exists())
+            import json
+            self.assertIn("x", json.loads(p.read_text()))
+
+    def test_connect_offline_clean_message(self):
+        # 修复: connect 失败返回"List of devices attached"裸表头,
+        # 前端显示"不在线 List of devices attached"。改为干净文案。
+        saved_run = app.subprocess.run
+        app.subprocess.run = lambda *a, **k: type("P", (), {"returncode": 0, "stdout": "List of devices attached\n", "stderr": ""})()
+        try:
+            ok, msg = app.connect("10.10.0.14:5555")
+            self.assertFalse(ok)
+            self.assertIn("ADB 无线调试", msg)
+            self.assertNotIn("List of devices", msg)
+        finally:
+            app.subprocess.run = saved_run
+
     def test_skip_when_same_tag_already_installed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

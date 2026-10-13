@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import urllib.error
@@ -141,7 +142,7 @@ def save_config(data):
 
 def save_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
+    tmp = Path(tempfile.mktemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent)))
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
 
@@ -219,7 +220,9 @@ def connect(address):
     adb("connect", address, timeout=20)
     code, out = adb("devices", timeout=15)
     online = any(line.startswith(address) and "\tdevice" in line for line in out.splitlines())
-    return online, out
+    if online:
+        return True, out
+    return False, "没开机或 ADB 无线调试(5555)没开"
 
 
 def prop(address, name):
@@ -1025,12 +1028,10 @@ class Handler(BaseHTTPRequestHandler):
                     row.update({"online": True, "model": profile["model"], "android": profile["release"], "abi": profile["abi"], "sdk": profile["sdk"]})
                     row.update(device_stats(address))
                 else:
-                    offline[address] = now.isoformat(timespec="seconds")
                     row.update({"online": False, "detail": err or "没开机或 5555 没开"})
                 rows.append(row)
-            if offline:
-                state["offline"] = offline
-                save_json(STATE, state)
+            # 注意: 不在 GET 里写 state.json。once() 循环会维护 offline 冷却,
+            # GET 处理器写 .tmp 会与主循环并发竞争导致 FileNotFoundError。
             self.send(200, json.dumps(rows, ensure_ascii=False))
         elif self.path == "/api/log":
             lines = LOG.read_text(encoding="utf-8").splitlines() if LOG.exists() else []

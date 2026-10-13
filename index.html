@@ -204,7 +204,7 @@ function show(id,btn){
 function field(obj,key){return `<input data-k="${key}" value="${esc(obj[key]??"")}">`}
 function paintForms(){
   deviceList.innerHTML=cfg.devices.map((d,i)=>`<div class="row"><div><label>名称</label>${field(d,"name")}</div><div><label>IP</label>${field(d,"ip")}</div><div><label>端口</label>${field(d,"port")}</div><button class="bad" onclick="removeDevice(${i})">删除</button></div>`).join("")||'<p class="muted">还没有设备</p>';
-  appList.innerHTML=cfg.apps.map((d,i)=>`<div class="row app-row"><div><label>名称，可空</label>${field(d,"name")}</div><div><label>GitHub 或 APK 直链</label>${field(d,"source")}</div><div><label>最低安卓版本，可空</label><input data-k="min_sdk" type="number" min="0" value="${esc(d.min_sdk??"")}"></div><button class="bad" onclick="removeApp(${i})">删除</button></div>`).join("")||'<p class="muted">还没有软件</p>';
+  appList.innerHTML=cfg.apps.map((d,i)=>`<div class="row app-row"><div><label>名称，可空</label>${field(d,"name")}</div><div><label>GitHub 或 APK 直链</label>${field(d,"source")}</div><button class="bad" onclick="removeApp(${i})">删除</button></div>`).join("")||'<p class="muted">还没有软件</p>';
   document.querySelectorAll("[data-k]").forEach(el=>el.oninput=collect);
 }
 function collect(){
@@ -218,7 +218,6 @@ function collect(){
   cfg.apps=arows.map(row=>{
     const o={};
     [...row.querySelectorAll("[data-k]")].forEach(el=>o[el.dataset.k]=el.value);
-    if(o.min_sdk) o.min_sdk=+o.min_sdk; else delete o.min_sdk;
     return o;
   });
   cfg.notify={feishu:feishu.value.trim(),pushplus:pushplus.value.trim(),bark:bark.value.trim()};
@@ -248,7 +247,7 @@ function importConfig(input){
     }catch(e){toast("不是配置文件");return}
     if(!Array.isArray(data.devices)||!Array.isArray(data.apps)){toast("配置里没有设备和软件");return}
     cfg.devices=data.devices.map(d=>({name:d.name||"",ip:d.ip||"",port:d.port||5555}));
-    cfg.apps=data.apps.map(d=>{const o={name:d.name||"",source:d.source||d.repo||""};if(d.min_sdk)o.min_sdk=+d.min_sdk;return o});
+    cfg.apps=data.apps.map(d=>({name:d.name||"",source:d.source||d.repo||""}));
     if(data.notify&&typeof data.notify==="object"){
       cfg.notify={feishu:data.notify.feishu||"",pushplus:data.notify.pushplus||"",bark:data.notify.bark||""};
       feishu.value=cfg.notify.feishu;
