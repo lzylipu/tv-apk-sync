@@ -131,6 +131,12 @@ pre{white-space:pre-wrap;background:var(--field);color:var(--ink);border:1px sol
   nav button span.d{display:none}
   nav button span.m{display:inline}
   main{padding:12px 10px}
+
+  /* 应用卡：上行信息、下行操作按钮 */
+  .appcard{flex-direction:column;align-items:stretch;gap:8px}
+  .appcard>div:first-child{display:flex;flex-direction:column;gap:2px;flex:none}
+  .appcard>div:first-child>*{overflow:visible;text-overflow:clip;white-space:normal;word-break:break-all}
+  .appcard .ops{flex-wrap:wrap;justify-content:flex-start}
 }
 </style>
 <div class="stage"></div>
